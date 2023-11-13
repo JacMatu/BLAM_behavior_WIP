@@ -1,0 +1,602 @@
+---
+title: "BLAM_Liege_beh_analyses"
+author: "Jacek Matuszewski"
+date: '2023-09-08'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Basic info about projects and tasks
+
+BLAM project includes following sub-projects (and their behavioural conditions and tasks)
+
+WATCHOUT: sighted subjects perform TWO tasks in motion, one audio and one visual so some responses my be to FixationTargets and some to AuditoryTargets
+
+3.  Bimidal motion auditory
+4.  Bimodal motion visual
+
+
+Not all groups have all tasks!
+
+This script loads and wrangles data for each task and subject and summarizes them in a group data frame and makes basic plots
+
+Load packages
+
+```{r load packages, echo = FALSE}
+library(tidyverse)
+library(lubridate)
+library(stringr)
+library(stringi)
+library(rstatix)
+#library(psycho)
+library(RColorBrewer)
+library(cowplot)
+library(patchwork)
+library(ez)
+```
+
+## Define basic variables
+
+```{r, echo = FALSE}
+#Setup some paths
+project_path <- '/Volumes/Slim_Reaper/Projects/BLAM_Liege_project/Behavioural_data_all' #main yoda folder for this script
+raw_repo <- '2023_Liege_BLAM_MB_raw'
+inputs <- paste(project_path, 'inputs', raw_repo, sep = '/') #datalad raw repo in inputs
+deriv_r <- paste(project_path, 'outputs','derivatives', 'R_beh_data', sep = '/') #basic output for this script
+
+
+#base names for tasks to be BIDSified in loops later on
+#tasks <- c('task-audioV1', 'task-auditoryLocalizer', 'task-visualLocalizer', 
+#           'task-bimodalMotionAud', 'task-bimodalMotionVis')
+
+accu_tw <- 3
+#prefixes for groups, Early Blind (EB) and Sighted Controls (SC)
+groups <- c('EB', 'SC')
+#env cleanup
+rm(raw_repo)
+source(paste(project_path, 'code','src','BLAM_functions_analyses.R', sep = '/'))
+```
+
+
+## BIMODAL MOTION AUDIO - MOTION VS STATIC
+Main analyses
+```{r}
+# This has to go by runs 
+
+## FOR NOW THE SCRIPT CRASHES AS IT ASSUMES IDENTICAL NUMBER OF SUBJECTS PER GROUP
+## THERE MUST BE A BETTER WAY TO DO IT, e.g. list of all subjects and then extracting the group from sub
+#sub_SC <- c('01','02','03','04','07')
+#sub_EB<- c('01','02','03', '06','05','07')
+
+sub <- c('EB01','EB02','EB03', 'EB06','EB05','EB07',
+         'SC01','SC02','SC03','SC04','SC07')
+
+task <- 'bimodalMotionAud'
+conditions <- c('auditory_motion', 'auditory_static')
+
+#Prepare df to store group accuracy
+df_BimodAudio_summ_accu_cond <- data.frame(stringsAsFactors = FALSE)
+df_BimodAudio_run_accu_cond <- data.frame(stringsAsFactors = FALSE)
+
+#Loop across subjects 
+#for(g in seq_along(groups)){
+   # for(i in seq_along(sub_EB)) {
+        for(i in seq_along(sub)) {
+        
+        #Pick a subject from correct list 
+       # if(groups[g]=='EB'){
+        #    bids_sub <- paste0('sub-',groups[g],sub_EB[i])
+        #}else if(groups[g]=='SC'){
+        #    bids_sub <- paste0('sub-',groups[g],sub_SC[i])
+        #}
+        gr <- str_sub(sub[i],1,2)
+        bids_sub <- paste0('sub-',sub[i])
+        
+        #Grab events from this sub in this task 
+        sub_events <- list.files(path = paste(inputs,bids_sub, sep = '/'),
+                                 pattern = paste0(bids_sub,'_.*_task-' ,task, ".*_events\\.tsv$"), 
+                                 recursive = TRUE)
+        
+        sub_accu <- data.frame(stringsAsFactors = FALSE)
+        
+        
+        
+        for(j in seq_along(sub_events)){
+            
+            temp_data<-read.table(paste(inputs, bids_sub, sub_events[j],
+                                        sep = '/'), header=TRUE)
+            
+            for(c in seq_along(conditions)){
+                
+                #Main subject df to wrangle, only one run now!
+                temp_data_clean <- temp_data %>% 
+                    #get rid of trigger events
+                    #filter((!grepl('trigger', trial_type))) %>% 
+                    filter(trial_type == conditions[c] | trial_type == 'response') %>% 
+                    #mutate(target = as.numeric(target)) %>% 
+                    #REASSIGN TARGET VALUES: FOR BLIND: "ignore" 3s and 1s [fix cross colours]
+                    # 3 = static target / 2 = motion target? but only for sub 01 & 02
+                    # rest have 2.000 as a general audio target
+                    mutate(target = recode(target, 
+                                           #Change all souund targets to 1
+                                           '3' = '1', 
+                                           '2' = '1',
+                                           '2.000000' = '1',
+                                           # Change all visual fix targets to 0!
+                                           '1.000000' = '0',
+                                           '1' = '0',
+                                           'n/a' = '0')) %>% 
+                    mutate(target_func = target)
+                
+                
+                accu_percent <- blam_accuracy_tw(temp_data_clean, accu_tw)
+                
+                
+                
+                accu_temp <- data.frame(subject = bids_sub, 
+                                        #group = groups[g],
+                                        group = gr,
+                                        cond = conditions[c],
+                                        run_num = j,
+                                        run_lab = paste0('run-0',j),
+                                        task = task, 
+                                        accu_percent = accu_percent) %>% 
+                     mutate(cond = factor(cond, levels = c('auditory_motion', 'auditory_static')))
+                #Add this run to subject data
+                sub_accu <- rbind(sub_accu, accu_temp)
+                
+                
+                
+            }
+            
+            #Add data to accuracies by RUN
+            df_BimodAudio_run_accu_cond <- rbind(df_BimodAudio_run_accu_cond, sub_accu)
+            
+            
+        }
+        sub_accu_mean <- sub_accu %>% 
+            group_by(cond) %>% 
+            mutate(accu_percent = mean(accu_percent)) %>% 
+            dplyr::select(-c(run_lab, run_num)) %>% 
+            slice(1)
+        
+        #Add data to accuracy summaries by subject
+        df_BimodAudio_summ_accu_cond<- rbind(df_BimodAudio_summ_accu_cond, sub_accu_mean)
+    }
+#}
+
+    #Small cleanup
+    rm(accu_temp,sub_accu, sub_accu_mean, temp_data, temp_data_clean)   
+```
+
+## BIMODAL MOTION AUDIO - CONDITION X AXIS
+
+```{r}
+# This has to go by runs 
+
+## FOR NOW THE SCRIPT CRASHES AS IT ASSUMES IDENTICAL NUMBER OF SUBJECTS PER GROUP
+## THERE MUST BE A BETTER WAY TO DO IT, e.g. list of all subjects and then extracting the group from sub
+#sub_SC <- c('01','02','03','04','07')
+#sub_EB<- c('01','02','03', '06','05','07')
+
+sub <- c('EB01','EB02','EB03', 'EB06','EB05','EB07',
+         'SC01','SC02','SC03','SC04','SC07')
+
+task <- 'bimodalMotionAud'
+conditions <- c('auditory_motion', 'auditory_static')
+axis_list <- c('vertical', 'horizontal') 
+
+#Prepare df to store group accuracy
+df_BimodAudio_summ_accu_cond_axis <- data.frame(stringsAsFactors = FALSE)
+df_BimodAudio_run_accu_cond_axis <- data.frame(stringsAsFactors = FALSE)
+
+#Loop across subjects 
+#for(g in seq_along(groups)){
+   # for(i in seq_along(sub_EB)) {
+        for(i in seq_along(sub)) {
+        
+        #Pick a subject from correct list 
+       # if(groups[g]=='EB'){
+        #    bids_sub <- paste0('sub-',groups[g],sub_EB[i])
+        #}else if(groups[g]=='SC'){
+        #    bids_sub <- paste0('sub-',groups[g],sub_SC[i])
+        #}
+        gr <- str_sub(sub[i],1,2)
+        bids_sub <- paste0('sub-',sub[i])
+        
+        #Grab events from this sub in this task 
+        sub_events <- list.files(path = paste(inputs,bids_sub, sep = '/'),
+                                 pattern = paste0(bids_sub,'_.*_task-' ,task, ".*_events\\.tsv$"), 
+                                 recursive = TRUE)
+        
+        sub_accu <- data.frame(stringsAsFactors = FALSE)
+        
+        
+        
+        for(j in seq_along(sub_events)){
+            
+            temp_data<-read.table(paste(inputs, bids_sub, sub_events[j],
+                                        sep = '/'), header=TRUE)
+            
+            for(c in seq_along(conditions)){
+                
+                for(a in seq_along(axis_list)){
+                #Main subject df to wrangle, only one run now!
+                temp_data_clean <- temp_data %>% 
+                    #get rid of trigger events
+                    #filter((!grepl('trigger', trial_type))) %>% 
+                    filter(trial_type == conditions[c] | trial_type == 'response') %>% 
+                    filter(axis == axis_list[a] | axis == 'n/a') %>% 
+                    #mutate(target = as.numeric(target)) %>% 
+                    #REASSIGN TARGET VALUES: FOR BLIND: "ignore" 3s and 1s [fix cross colours]
+                    # 3 = static target / 2 = motion target? but only for sub 01 & 02
+                    # rest have 2.000 as a general audio target
+                    mutate(target = recode(target, 
+                                           #Change all souund targets to 1
+                                           '3' = '1', 
+                                           '2' = '1',
+                                           '2.000000' = '1',
+                                           # Change all visual fix targets to 0!
+                                           '1.000000' = '0',
+                                           '1' = '0',
+                                           'n/a' = '0')) %>% 
+                    mutate(target_func = target)
+                
+                
+                accu_percent <- blam_accuracy_tw(temp_data_clean, accu_tw)
+                
+                
+                
+                accu_temp <- data.frame(subject = bids_sub, 
+                                        #group = groups[g],
+                                        group = gr,
+                                        cond = conditions[c],
+                                        axis = axis_list[a],
+                                        run_num = j,
+                                        run_lab = paste0('run-0',j),
+                                        task = task, 
+                                        accu_percent = accu_percent) %>% 
+                     mutate(cond = factor(cond, levels = c('auditory_motion', 'auditory_static')))
+                #Add this run to subject data
+                sub_accu <- rbind(sub_accu, accu_temp)
+                
+                
+                
+           
+            
+            #Add data to accuracies by RUN
+            df_BimodAudio_run_accu_cond_axis <- rbind(df_BimodAudio_run_accu_cond_axis, sub_accu)
+                }
+            }
+        }
+        sub_accu_mean <- sub_accu %>% 
+            group_by(cond, axis) %>% 
+            mutate(accu_percent = mean(accu_percent)) %>% 
+            dplyr::select(-c(run_lab, run_num)) %>% 
+            slice(1)
+        
+        #Add data to accuracy summaries by subject
+        df_BimodAudio_summ_accu_cond_axis<- rbind(df_BimodAudio_summ_accu_cond_axis, sub_accu_mean)
+    }
+#}
+
+    #Small cleanup
+    rm(accu_temp,sub_accu, sub_accu_mean, temp_data, temp_data_clean)   
+```
+
+Summary stats
+```{r}
+summary_BimodAudio_cond <- df_BimodAudio_summ_accu_cond %>% 
+    group_by(group, cond) %>% 
+    dplyr::summarise(
+        mean = mean(accu_percent), 
+        sd = mean(accu_percent)
+    )
+
+summary_BimodAudio_axis <- df_BimodAudio_summ_accu_cond_axis %>% 
+    group_by(group, cond, axis) %>% 
+    dplyr::summarise(
+        mean = mean(accu_percent), 
+        sd = mean(accu_percent)
+    )
+```
+
+
+Anovas
+```{r}
+ANOVA_BimodalAudio_conditions <- ezANOVA(
+    data = df_BimodAudio_summ_accu_cond,
+    dv = accu_percent,
+    wid = subject,
+    within = cond,
+    between = group)
+
+
+ANOVA_BimodalAudio_conditions_axis <- ezANOVA(
+    data = df_BimodAudio_summ_accu_cond_axis,
+    dv = accu_percent,
+    wid = subject,
+    within = .(cond, axis), 
+    between = group)
+
+```
+
+
+## BIMODAL MOTION VISUAL- MOTION VS STATIC
+```{r}
+
+subject <- c('01','02','03', '04','07')
+task <- 'bimodalMotionVis'
+conditions <- c('visual_motion', 'visual_static')
+
+
+#Prepare df to store group accuracy
+df_bimodMotVis_sighted_summ_accu_cond <- data.frame(stringsAsFactors = FALSE)
+df_bimodMotVis_sighted_run_accu_cond <- data.frame(stringsAsFactors = FALSE)
+
+#Loop across subjects 
+for(i in seq_along(subject)) {
+    
+    bids_sub <- paste0('sub-',groups[2],subject[i])
+
+    #Grab events from this sub in this task 
+    sub_events <- list.files(path = paste(inputs,bids_sub, sep = '/'),
+                     pattern = paste0(bids_sub,'_.*_task-' ,task, ".*_events\\.tsv$"), 
+                     recursive = TRUE)
+    
+    sub_accu <- data.frame(stringsAsFactors = FALSE)
+    
+    
+    
+    for(j in seq_along(sub_events)){
+          
+        temp_data<-read.table(paste(inputs, bids_sub, sub_events[j],
+                                sep = '/'), header=TRUE)
+        
+        for(c in seq_along(conditions)){
+        
+        #Main subject df to wrangle, only one run now!
+        temp_data_clean <- temp_data %>% 
+            #get rid of trigger events
+            #filter((!grepl('trigger', trial_type))) %>% 
+             filter(trial_type == conditions[c] | trial_type == 'response') %>% 
+            #mutate(target = as.numeric(target)) %>% 
+            #REASSIGN TARGET VALUES: FOR BLIND: "ignore" 3s and 1s [fix cross colours]
+            # 3 = static target / 2 = motion target? but only for sub 01 & 02
+            # rest have 2.000 as a general audio target
+            mutate(target = recode(target, '3' = '1', 
+                                   '2' = '1',
+                                   '2.000000' = '1',
+                                   '1.000000' = '0',
+                                   '1' = '0',
+                                   'n/a' = '0')) %>% 
+            mutate(target_func = target)
+        
+        
+        accu_percent <- blam_accuracy_tw(temp_data_clean, accu_tw)
+        
+        accu_temp <- data.frame(subject = bids_sub, 
+                                group = groups[2],
+                                cond = conditions[c],
+                                run_num = j,
+                                run_lab = paste0('run-0',j),
+                                task = task, 
+                                accu_percent = accu_percent) %>% 
+                     mutate(cond = factor(cond, levels = c('visual_motion', 'visual_static')))
+        #Add this run to subject data
+        sub_accu <- rbind(sub_accu, accu_temp)
+        
+        
+        
+        }
+        
+        #Add data to accuracies by RUN
+        df_bimodMotVis_sighted_run_accu_cond <- rbind(df_bimodMotVis_sighted_run_accu_cond, sub_accu)
+        
+        
+    }
+    sub_accu_mean <- sub_accu %>% 
+        group_by(cond) %>% 
+        mutate(accu_percent = mean(accu_percent)) %>% 
+        dplyr::select(-c(run_lab, run_num)) %>% 
+        slice(1)
+    
+    #Add data to accuracy summaries by subject
+    df_bimodMotVis_sighted_summ_accu_cond<- rbind(df_bimodMotVis_sighted_summ_accu_cond, sub_accu_mean)
+}
+ 
+    #Small cleanup
+    rm(accu_temp,sub_accu, sub_accu_mean, temp_data, temp_data_clean)   
+```
+ 
+
+## BIMODAL MOTION VISUAL- CONDITION x AXIS
+```{r}
+
+subject <- c('01','02','03', '04','07')
+task <- 'bimodalMotionVis'
+conditions <- c('visual_motion', 'visual_static')
+axis_list <- c('vertical', 'horizontal') 
+
+#Prepare df to store group accuracy
+df_bimodMotVis_sighted_summ_accu_cond_axis <- data.frame(stringsAsFactors = FALSE)
+df_bimodMotVis_sighted_run_accu_cond_axis <- data.frame(stringsAsFactors = FALSE)
+
+#Loop across subjects 
+for(i in seq_along(subject)) {
+    
+    bids_sub <- paste0('sub-',groups[2],subject[i])
+    
+    #Grab events from this sub in this task 
+    sub_events <- list.files(path = paste(inputs,bids_sub, sep = '/'),
+                             pattern = paste0(bids_sub,'_.*_task-' ,task, ".*_events\\.tsv$"), 
+                             recursive = TRUE)
+    
+    sub_accu <- data.frame(stringsAsFactors = FALSE)
+    
+    
+    
+    for(j in seq_along(sub_events)){
+        
+        temp_data<-read.table(paste(inputs, bids_sub, sub_events[j],
+                                    sep = '/'), header=TRUE)
+        
+        # MOTION VS STATIC
+        for(c in seq_along(conditions)){
+            
+            # HORIZONTAL VS VERTICAL 
+            for(a in seq_along(axis_list)){
+                #Main subject df to wrangle, only one run now!
+                temp_data_clean <- temp_data %>% 
+                    #get rid of trigger events
+                    #filter((!grepl('trigger', trial_type))) %>% 
+                    filter(trial_type == conditions[c] | trial_type == 'response') %>% 
+                    #keep given axis and responses (they have 'n/a in axis)
+                    filter(axis == axis_list[a] | axis == 'n/a') %>% 
+                    #mutate(target = as.numeric(target)) %>% 
+                    #REASSIGN TARGET VALUES: FOR BLIND: "ignore" 3s and 1s [fix cross colours]
+                    # 3 = static target / 2 = motion target? but only for sub 01 & 02
+                    # rest have 2.000 as a general audio target
+                    mutate(target = recode(target, '3' = '1', 
+                                           '2' = '1',
+                                           '2.000000' = '1',
+                                           '1.000000' = '0',
+                                           '1' = '0',
+                                           'n/a' = '0')) %>% 
+                    mutate(target_func = target)
+                
+                
+                accu_percent <- blam_accuracy_tw(temp_data_clean, accu_tw)
+                
+                accu_temp <- data.frame(subject = bids_sub, 
+                                        group = groups[2],
+                                        cond = conditions[c],
+                                        axis = axis_list[a],
+                                        run_num = j,
+                                        run_lab = paste0('run-0',j),
+                                        task = task, 
+                                        accu_percent = accu_percent) %>% 
+                    mutate(cond = factor(cond, levels = c('visual_motion', 'visual_static')))
+                #Add this run to subject data
+            
+                sub_accu <- rbind(sub_accu, accu_temp)
+                
+            
+            
+            #Add data to accuracies by RUN
+            df_bimodMotVis_sighted_run_accu_cond_axis <-
+                rbind(df_bimodMotVis_sighted_run_accu_cond_axis, sub_accu)
+            }
+        }
+        
+    }
+    sub_accu_mean <- sub_accu %>% 
+        group_by(cond, axis) %>% 
+        mutate(accu_percent = mean(accu_percent)) %>% 
+        dplyr::select(-c(run_lab, run_num)) %>% 
+        slice(1)
+    
+    #Add data to accuracy summaries by subject
+    df_bimodMotVis_sighted_summ_accu_cond_axis<- rbind(df_bimodMotVis_sighted_summ_accu_cond_axis, sub_accu_mean)
+}
+
+#Small cleanup
+rm(accu_temp,sub_accu, sub_accu_mean, temp_data, temp_data_clean)   
+```
+ 
+
+
+clean up
+```{r}
+rm(pairs, accu_temp, sub_accu, sub_accu_mean, temp_data, temp_data_clean)
+```
+
+## ----- PLOTS -----
+
+Plots for each condition
+```{r}
+source(paste(project_path,'code','src','BLAM_functions_plots.R', sep = '/'))
+
+
+dark_colors <- brewer.pal(n=3, name = "Dark2") 
+light_colors <- brewer.pal(n=3, name = "Pastel2") 
+
+lab_aud <- c('Motion (A)', 'Static (A)')
+lab_vis <- c('Motion (V)', 'Static (V)')
+
+
+## AUDIO PLOTS
+# AVERAGE
+plot_BimodAudio_blind <- df_BimodAudio_summ_accu_cond %>% 
+    filter(group == "EB") %>% 
+    blam_accuracy_points_sum_conditions_group(., lab_aud, dark_colors[1])
+
+plot_BimodAudio_sighted<- df_BimodAudio_summ_accu_cond %>% 
+    filter(group == "SC") %>% 
+    blam_accuracy_points_sum_conditions_group(., lab_aud, dark_colors[2])
+
+plot_BimodAudio <- plot_BimodAudio_blind + plot_BimodAudio_sighted
+rm(plot_Audio_V1_accu_run_blind, plot_Audio_V1_accu_run_sighted)
+
+# BY RUN
+plot_BimodAudio_accu_run_blind <- df_BimodAudio_run_accu_cond %>% 
+    filter(group=='EB') %>% 
+    blam_accuracy_points_run_cond(.)
+
+plot_BimodAudio_accu_run_sighted <- df_BimodAudio_run_accu_cond %>% 
+    filter(group=='SC') %>% 
+    blam_accuracy_points_run_cond(.)
+
+plot_BimodAudio_accu_run <- plot_BimodAudio_accu_run_blind + plot_BimodAudio_accu_run_sighted 
+rm(plot_BimodAudio_accu_run_blind, plot_BimodAudio_accu_run_sighted)
+
+## VISUAL PLOTS 
+#AVERAGE
+plot_BimodVis_sighted <- blam_accuracy_points_sum_conditions_group(df_bimodMotVis_sighted_summ_accu_cond, 
+                                                                lab_vis, 
+                                                                dark_colors[2])
+
+#BY RUN
+plot_BimodVis_accu_run_sighted <- df_bimodMotVis_sighted_run_accu_cond %>% 
+    blam_accuracy_points_run_cond(.)
+
+```
+
+
+Plots for each CONDITION AND AXIS
+```{r}
+source(paste(project_path,'code','src','BLAM_functions_plots.R', sep = '/'))
+
+
+dark_colors <- brewer.pal(n=3, name = "Dark2") 
+light_colors <- brewer.pal(n=3, name = "Pastel2") 
+
+lab_axis <- c('Motion (Hor)', 'Motion (Vert)',  'Static (Hor)','Static(Vert)')
+
+
+##
+plot_BimodAudio_blind_axis <- df_BimodAudio_summ_accu_cond_axis %>% 
+    filter(group == "EB") %>% 
+    blam_accuracy_points_bimodal_axis(., lab_axis, dark_colors[1])
+
+plot_BimodAudio_sighted_axis <- df_BimodAudio_summ_accu_cond_axis %>% 
+    filter(group == "SC") %>% 
+    blam_accuracy_points_bimodal_axis(., lab_axis, dark_colors[2])
+
+plot_BimodalAudio_axis <- plot_BimodAudio_blind_axis + plot_BimodAudio_sighted_axis
+rm(plot_BimodAudio_sighted_axis, plot_BimodAudio_blind_axis)
+
+
+plot_BimodalVis_axis <-  blam_accuracy_points_bimodal_axis(df_bimodMotVis_sighted_summ_accu_cond_axis, lab_axis, dark_colors[2])
+
+```
+
+
+#----------------------------- TESTS ------------------------------
+
+
+
+

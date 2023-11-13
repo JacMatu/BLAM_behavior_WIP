@@ -1,0 +1,334 @@
+---
+title: "BLAM_Liege_beh_analyses"
+author: "Jacek Matuszewski"
+date: '2023-09-08'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Basic info about projects and tasks
+
+BLAM project includes following sub-projects (and their behavioural conditions and tasks)
+
+WATCHOUT: sighted subjects perform TWO tasks in motion, one audio and one visual so some responses my be to FixationTargets and some to AuditoryTargets
+
+5.  Audio V1
+
+Not all groups have all tasks!
+
+This script loads and wrangles data for each task and subject and summarizes them in a group data frame and makes basic plots
+
+Load packages
+
+```{r load packages, echo = FALSE}
+library(tidyverse)
+library(lubridate)
+library(stringr)
+library(stringi)
+library(rstatix)
+#library(psycho) #For d'
+library(RColorBrewer)
+library(cowplot)
+library(patchwork)
+library(ez)
+
+```
+
+## Define basic variables
+
+```{r}
+#Setup some paths
+project_path <- '/Volumes/Slim_Reaper/Projects/BLAM_Liege_project/Behavioural_data_all' #main yoda folder for this script
+raw_repo <- '2023_Liege_BLAM_MB_raw'
+inputs <- paste(project_path, 'inputs', raw_repo, sep = '/') #datalad raw repo in inputs
+deriv_r <- paste(project_path, 'outputs','derivatives', 'R_beh_data', sep = '/') #basic output for this script
+
+
+#base names for tasks to be BIDSified in loops later on
+#tasks <- c('task-audioV1', 'task-auditoryLocalizer', 'task-visualLocalizer', 
+#           'task-bimodalMotionAud', 'task-bimodalMotionVis')
+task <- 'audioV1'
+#prefixes for groups, Early Blind (EB) and Sighted Controls (SC)
+groups <- c('EB', 'SC')
+
+accu_tw <- 3
+#env cleanup
+source(paste(project_path, 'code','src','BLAM_functions_analyses.R', sep = '/'))
+rm(raw_repo)
+```
+
+
+## BLIND+SIGHTED AUDIO V1: average performance
+
+```{r}
+#List of subjects for this particular task
+# still waiting for others to be pushed to RAW REPO
+
+# This has to go by runs 
+sub_SC <- c('01','02','03','04', '06', '07')
+sub_EB<- c('01','02','03','04', '05','07')
+
+
+#Prepare df to store group accuracy
+df_AudioV1_summ_accu <- data.frame(stringsAsFactors = FALSE)
+df_AudioV1_run_accu <- data.frame(stringsAsFactors = FALSE)
+
+#Loop across subjects 
+for(g in seq_along(groups)){
+    for(i in seq_along(sub_SC)) {
+        
+        #Pick a subject from correct list 
+        if(groups[g]=='EB'){
+            bids_sub <- paste0('sub-',groups[g],sub_EB[i])
+        }else if(groups[g]=='SC'){
+            bids_sub <- paste0('sub-',groups[g],sub_SC[i])
+        }
+        
+        #Grab events from this sub in this task 
+        sub_events <- list.files(path = paste(inputs,bids_sub, sep = '/'),
+                                 pattern = paste0(bids_sub,'_.*_task-',task, ".*_events\\.tsv$"), 
+                                 recursive = TRUE)
+        
+        sub_accu <- data.frame(stringsAsFactors = FALSE)
+        
+        for(j in seq_along(sub_events)){
+            
+            temp_data<-read.table(paste(inputs, bids_sub, sub_events[j],
+                                        sep = '/'), header=TRUE)
+            
+            
+            # TRY TO ADD ANOTHER LOOP WITH CONDITIONS?
+            
+           # n_targets <- sum(as.numeric(temp_data$oneBack), na.rm = TRUE)
+            #n_responses <- temp_data %>% filter(trial_type == "response") %>% nrow()
+            
+            
+            #Main subject df to wrangle, only one run now!
+            temp_data_clean <- temp_data %>% 
+                #get rid of trigger events
+                filter((!grepl('trigger', trial_type))) %>% 
+                mutate(oneBack = recode(oneBack, 'n/a' = '0')) %>% 
+                mutate(oneBack = as.numeric(oneBack)) %>% 
+                #Equalize target column name for function use
+                mutate(target_func = oneBack)
+            
+            # Function call saves space! 
+            accu_percent <- blam_accuracy_tw(temp_data_clean, accu_tw)
+            
+            #ADD METADATA to the temp df
+            
+            accu_temp <- data.frame(subject = bids_sub, group = groups[g],
+                                    run_num = j,
+                                    run_lab = paste0('run-0',j),
+                                    task = task, 
+                                    accu_percent = accu_percent)
+            #Add this run to subject data
+            sub_accu <- rbind(sub_accu, accu_temp)
+            
+            
+            
+        }
+        
+        #Add data to accuracies by RUN
+        df_AudioV1_run_accu <- rbind(df_AudioV1_run_accu, sub_accu)
+        
+        sub_accu_mean <- sub_accu %>% 
+            mutate(accu_percent  = mean(accu_percent)) %>% 
+            dplyr::select(-c(run_lab, run_num)) %>% 
+            slice(1)
+        
+        #Add data to accuracy summaries by subject
+        df_AudioV1_summ_accu<- rbind(df_AudioV1_summ_accu, sub_accu_mean)
+        
+        
+        #Small cleanup
+        rm(accu_temp,sub_accu, sub_accu_mean, temp_data, temp_data_clean)     
+    }
+}
+    
+
+```
+
+
+
+## BLIND + SIGHTED AUDIO V1: condition split 
+
+```{r}
+#List of subjects for this particular task
+# still waiting for others to be pushed to RAW REPO
+
+# This has to go by runs 
+sub_SC <- c('01','02','03','04', '06', '07')
+sub_EB<- c('01','02','03','04', '05','07')
+conditions <- c('object','voice','scrambled_object','scrambled_voice')
+
+#Prepare df to store group accuracy
+df_AudioV1_summ_accu_cond <- data.frame(stringsAsFactors = FALSE)
+df_AudioV1_run_accu_cond <- data.frame(stringsAsFactors = FALSE)
+
+#Loop across subjects 
+for(g in seq_along(groups)){
+    for(i in seq_along(sub_SC)) {
+        
+        #Pick a subject from correct list 
+        if(groups[g]=='EB'){
+            bids_sub <- paste0('sub-',groups[g],sub_EB[i])
+        }else if(groups[g]=='SC'){
+            bids_sub <- paste0('sub-',groups[g],sub_SC[i])
+        }
+        
+        #Grab events from this sub in this task 
+        sub_events <- list.files(path = paste(inputs,bids_sub, sep = '/'),
+                                 pattern = paste0(bids_sub,'_.*_task-',task, ".*_events\\.tsv$"), 
+                                 recursive = TRUE)
+        
+        sub_accu <- data.frame(stringsAsFactors = FALSE)
+        
+        for(j in seq_along(sub_events)){
+            
+            temp_data<-read.table(paste(inputs, bids_sub, sub_events[j],
+                                        sep = '/'), header=TRUE)
+            
+            for(c in seq_along(conditions)){
+                
+                
+                #Main subject df to wrangle, only one run now!
+                temp_data_clean <- temp_data %>% 
+                    #get rid of trigger events
+                    filter(trial_type == conditions[c] | trial_type == 'response') %>%  
+                    mutate(oneBack = recode(oneBack, 'n/a' = '0')) %>% 
+                    mutate(oneBack = as.numeric(oneBack)) %>% 
+                    #Equalize target column name for function use
+                    mutate(target_func = oneBack)
+                
+                # Function call saves space! 
+                accu_percent <- blam_accuracy_tw(temp_data_clean, accu_tw)
+                
+                #ADD METADATA to the temp df
+                
+                accu_temp <- data.frame(subject = bids_sub, 
+                                        group = groups[g],
+                                        cond = conditions[c],
+                                        run_num = j,
+                                        run_lab = paste0('run-0',j),
+                                        task = task, 
+                                        accu_percent = accu_percent)
+                #Add this run to subject data
+                sub_accu <- rbind(sub_accu, accu_temp)
+                
+            }   
+            
+            #Add data to accuracies by RUN
+            df_AudioV1_run_accu_cond <- rbind(df_AudioV1_run_accu_cond, sub_accu)
+            
+        }     
+        
+        sub_accu_mean <- sub_accu %>% 
+            group_by(cond) %>% 
+            mutate(accu_percent = mean(accu_percent)) %>% 
+            mutate(cond = factor(cond, levels = c('object', 
+                                                  'voice', 
+                                                  'scrambled_object', 
+                                                  'scrambled_voice'))) %>% 
+            dplyr::select(-c(run_lab, run_num)) %>% 
+            slice(1)
+        
+        #Add data to accuracy summaries by subject
+        df_AudioV1_summ_accu_cond<- rbind(df_AudioV1_summ_accu_cond, sub_accu_mean)
+        
+    }
+}
+
+#Small cleanup    
+rm(accu_temp,sub_accu, sub_accu_mean, temp_data, temp_data_clean)   
+
+```
+
+Make summary DF with group stats
+```{r}
+#ALL DATA
+df_AudioV1_group_conditions <- df_AudioV1_summ_accu_cond %>% 
+    group_by(group, cond) %>% 
+    dplyr::summarise(mean = mean(accu_percent),
+                     sd = sd(accu_percent))
+
+#NO OUTLIERS
+df_AudioV1_group_conditions_clean <- df_AudioV1_summ_accu_cond %>% 
+    filter(subject != 'sub-EB02' & subject != 'sub-SC06') %>% 
+    group_by(group, cond) %>% 
+    dplyr::summarise(mean = mean(accu_percent),
+                     sd = sd(accu_percent))
+
+
+
+ANOVA_conditions <- ezANOVA(
+    data = df_AudioV1_summ_accu_cond,
+    dv = accu_percent,
+    wid = subject,
+    within = cond,
+    between = group)
+```
+
+
+## ----- PLOTS -----
+
+Average Plots (across conditions)
+```{r}
+#Group SUM
+#source plotting functions
+source(paste(project_path,'code','src','BLAM_functions_plots.R', sep = '/'))
+ 
+## ONE BIG AVERAGE
+plot_AudioV1_accu <- blam_accuracy_points_sum(df_AudioV1_summ_accu) + 
+    theme(legend.position = 'none')
+
+##SPLIT BY RUNS
+plot_Audio_V1_accu_run_blind <- df_AudioV1_run_accu %>% 
+    filter(group=='EB') %>% 
+    blam_accuracy_points_run(.)
+
+plot_Audio_V1_accu_run_sighted <- df_AudioV1_run_accu %>% 
+    filter(group=='SC') %>% 
+    blam_accuracy_points_run(.)
+
+plot_Audio_V1_accu_run_blind+plot_Audio_V1_accu_run_sighted
+#plot_Audio_V1_accu_run_sighted
+```
+
+Plots for each condition
+```{r}
+source(paste(project_path,'code','src','BLAM_functions_plots.R', sep = '/'))
+
+
+dark_colors <- brewer.pal(n=3, name = "Dark2") 
+light_colors <- brewer.pal(n=3, name = "Pastel2") 
+
+lables <- c('O', 'V', 'ScO', 'ScV')
+
+
+plot_AudioV1_blind_accu_cond <- df_AudioV1_summ_accu_cond %>% filter(group=='EB') %>% 
+    blam_accuracy_points_sum_conditions_group(., lables, dark_colors[1])
+
+plot_AudioV1_sighted_accu_cond <- df_AudioV1_summ_accu_cond %>% filter(group=='SC') %>% 
+    blam_accuracy_points_sum_conditions_group(., lables, dark_colors[2])
+
+plot_AudioV1_accu_cond <- plot_AudioV1_blind_accu_cond + plot_AudioV1_sighted_accu_cond
+rm(plot_AudioV1_blind_accu_cond,plot_AudioV1_sighted_accu_cond)
+
+
+## REMOVE OUTLIERS
+plot_AudioV1_blind_accu_cond_clean <- df_AudioV1_summ_accu_cond %>% 
+    filter(group=='EB' & subject != 'sub-EB02') %>% 
+    blam_accuracy_points_sum_conditions_group(., lables, dark_colors[1])
+
+plot_AudioV1_sighted_accu_cond_clean <- df_AudioV1_summ_accu_cond %>% 
+    filter(group=='SC' & subject != 'sub-SC06') %>% 
+    blam_accuracy_points_sum_conditions_group(., lables, dark_colors[2])
+
+plot_AudioV1_accu_cond_clean <- plot_AudioV1_blind_accu_cond_clean + plot_AudioV1_sighted_accu_cond_clean
+rm(plot_AudioV1_blind_accu_cond_clean,plot_AudioV1_sighted_accu_cond_clean)
+```
+

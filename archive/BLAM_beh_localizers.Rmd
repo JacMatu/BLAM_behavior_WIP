@@ -1,0 +1,656 @@
+---
+title: "BLAM_Liege_beh_analyses"
+author: "Jacek Matuszewski"
+date: '2023-09-08'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Basic info about projects and tasks
+
+BLAM project includes following sub-projects (and their behavioural conditions and tasks)
+
+WATCHOUT: sighted subjects perform TWO tasks in motion, one audio and one visual so some responses my be to FixationTargets and some to AuditoryTargets
+
+1.  Auditory motion localizer
+2.  Visual motion localizer
+3.  Bimidal motion auditory
+4.  Bimodal motion visual
+5.  Audio V1
+
+Not all groups have all tasks!
+
+This script loads and wrangles data for each task and subject and summarizes them in a group data frame and makes basic plots
+
+## TO DO AFTER SUMMARY MEETING: 
+- restructure the script to look for responses based on the width of the TIME WINDOW
+instead of neighbouring trials (target followed by response)
+
+- divide trials and accuracy into subgroups based on conditions (to see if the beh. 
+performance is balanced across conditions)
+
+Load packages
+
+```{r load packages, echo = FALSE}
+library(tidyverse)
+library(lubridate)
+library(stringr)
+library(stringi)
+library(rstatix)
+#library(psycho)
+library(RColorBrewer)
+library(cowplot)
+```
+
+## Define basic variables
+
+```{r}
+#Setup some paths
+project_path <- '/Volumes/Slim_Reaper/Projects/BLAM_Liege_project/Behavioural_data_all' #main yoda folder for this script
+raw_repo <- '2023_Liege_BLAM_MB_raw'
+inputs <- paste(project_path, 'inputs', raw_repo, sep = '/') #datalad raw repo in inputs
+deriv_r <- paste(project_path, 'outputs','derivatives', 'R_beh_data', sep = '/') #basic output for this script
+
+
+#base names for tasks to be BIDSified in loops later on
+tasks <- c('task-audioV1', 'task-auditoryLocalizer', 'task-visualLocalizer', 
+           'task-bimodalMotionAud', 'task-bimodalMotionVis')
+
+#prefixes for groups, Early Blind (EB) and Sighted Controls (SC)
+groups <- c('EB', 'SC')
+
+#This is the WIDTH of the time window for accuracy, i.e. responses will be bound to targets if they occurr within that TW
+accu_tw <- 2
+#env cleanup
+rm(raw_repo)
+```
+
+Start slowly with Audio motion localizer, just one test subject Then put it into loops
+
+## BLIND AUDIO LOCALIZER: NEIGHBOURING EVENTS ONLY
+
+```{r}
+
+#List of subjects for this particular task
+# still waiting for others to be pushed to RAW REPO
+# sub-EB02 did not respond at all in this task so is excluded
+# subject <- c('01','03','04', '05','06','07')
+# 
+# 
+# #Prepare df to store group accuracy
+# df_AudioLoc_blind_accu <- data.frame(stringsAsFactors = FALSE)
+# 
+# #Loop across subjects 
+# for(i in seq_along(subject)) {
+#     
+#     bids_sub <- paste0('sub-',groups[1],subject[i])
+# 
+#     #Grab events from this sub in this task 
+#     #Sub EB01 & EB02 doesn't have _run-01_ in sequence name...
+#     if(bids_sub == 'sub-EB01'){
+#         sub_events <- list.files(path = paste(inputs,bids_sub, sep = '/'),
+#                          pattern = paste0(bids_sub,'_.*_' ,tasks[2], "_events\\.tsv$"), 
+#                          recursive = TRUE)
+#     }else{
+#         sub_events <- list.files(path = paste(inputs,bids_sub, sep = '/'),
+#                          pattern = paste0(bids_sub,'_.*_' ,tasks[2],
+#                                           "_run-01_events\\.tsv$"), 
+#                          recursive = TRUE)}
+#     
+#     for(j in seq_along(sub_events)){
+#           
+#         temp_data<-read.table(paste(inputs, bids_sub, sub_events[j],
+#                                 sep = '/'), header=TRUE)
+#         
+#         n_targets <- sum(as.numeric(temp_data$soundTarget), na.rm = TRUE)-1
+#         #n_responses <- temp_data %>% filter(trial_type == "response") %>% nrow()
+#         
+#         #Main subject df to wrangle, only one run now!
+#         temp_data_clean <- temp_data %>% 
+#             #get rid of trigger events
+#             filter((!grepl('trigger', trial_type))) %>% 
+#             #drop first event which is always flagged as a target
+#             slice(-1) %>% 
+#             mutate(soundTarget = recode(soundTarget, 'n/a' = '2')) %>% 
+#             mutate(soundTarget = as.numeric(soundTarget)) 
+# 
+#             #Get pairs of subsequent events to look for a soundTARGET followed by RESPONSE
+#             pairs <- data.frame(first = head(temp_data_clean$soundTarget, -1), 
+#                                 second = tail(temp_data_clean$soundTarget, -1))
+#             temp_tab <- table(pairs)
+#             
+#             
+#             accu_percent <- (temp_tab[2,3]/n_targets)*100   
+#             
+#             #ADD METADATA to the temp df
+#         
+#         accu_temp <- data.frame(subject = bids_sub, group = groups[1],
+#                                 
+#                                 task = tasks[2], accu_percent = 
+#                                     accu_percent)
+#             
+#         #Add this subject to group data
+#         df_AudioLoc_blind_accu <- rbind(df_AudioLoc_blind_accu, accu_temp)
+#         
+# 
+#     }
+# }
+#     
+# rm(pairs, temp_data, accu_temp, temp_data_clean)    
+
+```
+
+
+## BLIND AUDIO LOCALIZER: TIME WINDOW ANALYSES
+In the blind group, focus only on the SoundTargets
+Test the width of the time window to answer
+
+```{r}
+
+#List of subjects for this particular task
+# still waiting for others to be pushed to RAW REPO
+# sub-EB02 did not respond at all in this task so is excluded
+subject <- c('01','03','04', '05','06','07')
+
+
+#Prepare df to store group accuracy
+df_AudioLoc_blind_accu <- data.frame(stringsAsFactors = FALSE)
+
+
+
+#Loop across subjects 
+for(i in seq_along(subject)) {
+    
+    bids_sub <- paste0('sub-',groups[1],subject[i])
+    
+    #Grab events from this sub in this task 
+    #Sub EB01 & EB02 doesn't have _run-01_ in sequence name...
+    if(bids_sub == 'sub-EB01'){
+        sub_events <- list.files(path = paste(inputs,bids_sub, sep = '/'),
+                                 pattern = paste0(bids_sub,'_.*_' ,tasks[2],
+                                                  "_events\\.tsv$"), 
+                                 recursive = TRUE)
+    }else{
+        sub_events <- list.files(path = paste(inputs,bids_sub, sep = '/'),
+                                 pattern = paste0(bids_sub,'_.*_' ,tasks[2],
+                                                  "_run-01_events\\.tsv$"), 
+                                 recursive = TRUE)}
+    
+    for(j in seq_along(sub_events)){
+        
+        temp_data<-read.table(paste(inputs, bids_sub, sub_events[j],
+                                    sep = '/'), header=TRUE)
+        
+        #Sometimes first event is flagged as target, which is impossible. 
+        # If that's the case, drop it from the number of targets
+        if(as.numeric(temp_data$soundTarget[1]) == 1){
+             n_targets <- sum(as.numeric(temp_data$soundTarget), na.rm = TRUE)-1
+        } else {
+            n_targets <- sum(as.numeric(temp_data$soundTarget), na.rm = TRUE)
+        }
+       
+        #n_responses <- temp_data %>% filter(trial_type == "response") %>% nrow()
+        
+        #Main subject df to wrangle, only one run now!
+        temp_data_clean <- temp_data %>% 
+            #get rid of trigger events
+            filter((!grepl('trigger', trial_type))) %>% 
+            #drop first event which is always flagged as a target
+            slice(-1) %>% 
+            #mutate(soundTarget = recode(soundTarget, 'n/a' = '2')) %>% 
+            mutate(soundTarget = recode(soundTarget, 'n/a' = '0')) %>% 
+            mutate(soundTarget = as.numeric(soundTarget)) 
+        
+        #Get pairs of subsequent events to look for a soundTARGET followed by RESPONSE
+        #pairs <- data.frame(first = head(temp_data_clean$soundTarget, -1), 
+         #                   second = tail(temp_data_clean$soundTarget, -1))
+        #temp_tab <- table(pairs)
+        
+        
+        ## NEW SOLUTION: HOW TO FIND THE RESPONSES WITHIN THE TW? 
+        temp_hits <- c()
+        
+        for(iRow in 1:nrow(temp_data_clean)){
+            
+            #If this trial is a target
+            if(temp_data_clean$soundTarget[iRow]== 1){
+                
+                #Note the target onset
+                tar_onset <- temp_data_clean$onset[iRow]
+                
+                #Slice the DF based on the TW? 
+                tw_data <- temp_data_clean %>% 
+                    filter(onset <= tar_onset + accu_tw & onset > tar_onset-1)
+                
+                
+                #Check if there is a response within that time window
+                if(Reduce("|", tw_data$trial_type=='response')){
+                    
+                    hit <- 1
+                   temp_hits <- c(temp_hits, hit)
+                    #temp_hits[iRow] <- 1
+                } #else {
+                  #  hit <- 0
+                  #  temp_hits <- c(temp_hits, hit)
+                #}
+               
+            } 
+        }
+        
+        
+        #accu_percent <- (temp_tab[2,3]/n_targets)*100 
+        accu_percent <- (sum(temp_hits)/n_targets)*100
+        
+        #ADD METADATA to the temp df
+        
+        accu_temp <- data.frame(subject = bids_sub, group = groups[1],
+                                
+                                task = tasks[2], accu_percent = 
+                                    accu_percent)
+        
+        #Add this subject to group data
+        df_AudioLoc_blind_accu <- rbind(df_AudioLoc_blind_accu, accu_temp)
+        
+        
+    }
+}
+    
+rm(tw_data, temp_data, accu_temp, temp_data_clean)    
+
+```
+
+## SIGHTED AUDIO LOCALIZER
+
+```{r}
+
+# #Sighted subjects 
+# #sub-SC01 + sub-SC-07 responded only to fix crosses, so was awake 
+# subject <- c('01','02','03','04', '05','06', '07')
+# 
+# 
+# #Prepare df to store group accuracy
+# df_AudioLoc_sighted_accu <- data.frame(stringsAsFactors = FALSE)
+# 
+# #Loop across subjects 
+# for(i in seq_along(subject)) {
+#     
+#     bids_sub <- paste0('sub-',groups[2],subject[i])
+# 
+#     #Grab events from this sub in this task 
+#     if(bids_sub == 'sub-SC01' | bids_sub == 'sub-SC02'){
+#         sub_events <- list.files(path = paste(inputs,bids_sub, sep = '/'),
+#                          pattern = paste0(bids_sub,'_.*_' ,tasks[2], "_events\\.tsv$"), 
+#                          recursive = TRUE)
+#     }else if (bids_sub == 'sub-SC07') {
+#         sub_events <- list.files(path = paste(inputs,bids_sub, sep = '/'),
+#                          pattern = paste0(bids_sub,'_.*_' ,tasks[2], "_run-02_events\\.tsv$"), 
+#                          recursive = TRUE)
+#     }else{
+#         sub_events <- list.files(path = paste(inputs,bids_sub, sep = '/'),
+#                          pattern = paste0(bids_sub,'_.*_' ,tasks[2], "_run-01_events\\.tsv$"), 
+#                          recursive = TRUE)}
+#     
+#     for(j in seq_along(sub_events)){
+#           
+#         temp_data<-read.table(paste(inputs, bids_sub, sub_events[j],
+#                                 sep = '/'), header=TRUE)
+#         
+#         n_targets <- sum(as.numeric(temp_data$soundTarget), na.rm = TRUE)-1
+#         #n_responses <- temp_data %>% filter(trial_type == "response") %>% nrow()
+#         
+#         #Main subject df to wrangle, only one run now!
+#         temp_data_clean <- temp_data %>% 
+#             #get rid of trigger events
+#             filter((!grepl('trigger', trial_type))) %>% 
+#             #drop first event which is always flagged as a target
+#             slice(-1) %>% 
+#             mutate(soundTarget = recode(soundTarget, 'n/a' = '2')) %>% 
+#             mutate(soundTarget = as.numeric(soundTarget)) 
+#             
+#             #Get pairs of subsequent events to look for a soundTARGET followed by RESPONSE
+#             pairs <- data.frame(first = head(temp_data_clean$soundTarget, -1), 
+#                                 second = tail(temp_data_clean$soundTarget, -1))
+#             temp_tab <- table(pairs)
+#             
+#             accu_percent <- (temp_tab[2,3]/n_targets)*100   
+#             
+#             #ADD METADATA to the temp df
+#         
+#             accu_temp <- data.frame(subject = bids_sub, group = groups[2],
+#                                 
+#                                 task = tasks[2], accu_percent = 
+#                                     accu_percent)
+#             
+#         #Add this subject to group data
+#         df_AudioLoc_sighted_accu <- rbind(df_AudioLoc_sighted_accu, accu_temp)
+#         
+#         #clean up
+# 
+#     }
+# 
+# }
+#     
+# rm(pairs, temp_data, accu_temp, temp_data_clean)        
+
+```
+
+
+## SIGHTED AUDIO LOCALIZER: TW
+```{r}
+#Sighted subjects 
+#sub-SC01 + sub-SC-07 responded only to fix crosses, so was awake 
+subject <- c('01','02','03','04', '05','06', '07')
+
+
+#Prepare df to store group accuracy
+df_AudioLoc_sighted_accu <- data.frame(stringsAsFactors = FALSE)
+
+
+
+#Loop across subjects 
+for(i in seq_along(subject)) {
+    
+    bids_sub <- paste0('sub-',groups[2],subject[i])
+    
+    #Grab events from this sub in this task 
+    #Sub EB01 & EB02 doesn't have _run-01_ in sequence name...
+    if(bids_sub == 'sub-SC01'){
+        sub_events <- list.files(path = paste(inputs,bids_sub, sep = '/'),
+                                 pattern = paste0(bids_sub,'_.*_' ,tasks[2],
+                                                  "_events\\.tsv$"), 
+                                 recursive = TRUE)
+    }else{
+        sub_events <- list.files(path = paste(inputs,bids_sub, sep = '/'),
+                                 pattern = paste0(bids_sub,'_.*_' ,tasks[2],
+                                                  "_run-01_events\\.tsv$"), 
+                                 recursive = TRUE)}
+    
+    for(j in seq_along(sub_events)){
+        
+        temp_data<-read.table(paste(inputs, bids_sub, sub_events[j],
+                                    sep = '/'), header=TRUE)
+        
+        #Sometimes first event is flagged as target, which is impossible. 
+        # If that's the case, drop it from the number of targets
+        if(as.numeric(temp_data$soundTarget[1]) == 1){
+             n_targets <- sum(as.numeric(temp_data$soundTarget), na.rm = TRUE)-1
+        } else {
+            n_targets <- sum(as.numeric(temp_data$soundTarget), na.rm = TRUE)
+        }
+       
+        #n_responses <- temp_data %>% filter(trial_type == "response") %>% nrow()
+        
+        #Main subject df to wrangle, only one run now!
+        temp_data_clean <- temp_data %>% 
+            #get rid of trigger events
+            filter((!grepl('trigger', trial_type))) %>% 
+            #drop first event which is always flagged as a target
+            slice(-1) %>% 
+            #mutate(soundTarget = recode(soundTarget, 'n/a' = '2')) %>% 
+            mutate(soundTarget = recode(soundTarget, 'n/a' = '2')) %>% 
+            mutate(soundTarget = as.numeric(soundTarget)) 
+        
+        #Get pairs of subsequent events to look for a soundTARGET followed by RESPONSE
+        #pairs <- data.frame(first = head(temp_data_clean$soundTarget, -1), 
+         #                   second = tail(temp_data_clean$soundTarget, -1))
+        #temp_tab <- table(pairs)
+        
+        
+        ## NEW SOLUTION: HOW TO FIND THE RESPONSES WITHIN THE TW? 
+        temp_hits <- c()
+        
+        for(iRow in 1:nrow(temp_data_clean)){
+            
+            #If this trial is a target
+            if(temp_data_clean$soundTarget[iRow]== 1){
+                
+                #Note the target onset
+                tar_onset <- temp_data_clean$onset[iRow]
+                
+                #Slice the DF based on the TW? 
+                tw_data <- temp_data_clean %>% 
+                    filter(onset <= tar_onset + accu_tw & onset > tar_onset-1)
+                
+                
+                #Check if there is a response within that time window
+                if(Reduce("|", tw_data$trial_type=='response')){
+                    
+                    hit <- 1
+                   temp_hits <- c(temp_hits, hit)
+                    #temp_hits[iRow] <- 1
+                } #else {
+                  #  hit <- 0
+                  #  temp_hits <- c(temp_hits, hit)
+                #}
+               
+            } 
+        }
+        
+        
+        #accu_percent <- (temp_tab[2,3]/n_targets)*100 
+        accu_percent <- (sum(temp_hits)/n_targets)*100
+        
+        #ADD METADATA to the temp df
+        
+        accu_temp <- data.frame(subject = bids_sub, group = groups[2],
+                                
+                                task = tasks[2], accu_percent = 
+                                    accu_percent)
+        
+        #Add this subject to group data
+        df_AudioLoc_sighted_accu <- rbind(df_AudioLoc_sighted_accu, accu_temp)
+        
+        
+    }
+}
+    
+rm(tw_data, temp_data, accu_temp, temp_data_clean)  
+```
+
+
+## SIGHTED VISUAL LOCALIZER
+
+```{r}
+#Sighted subjects 
+#sub-SC01 responded only to fix crosses, so was awake 
+# subject <- c('01','02','03','04', '05', '06', '07')
+# 
+# 
+# #Prepare df to store group accuracy
+# df_VisualLoc_sighted_accu <- data.frame(stringsAsFactors = FALSE)
+# 
+# #Loop across subjects 
+# for(i in seq_along(subject)) {
+#     
+#     bids_sub <- paste0('sub-',groups[2],subject[i])
+# 
+#     #Grab events from this sub in this task 
+#     # SC01 + SC02 do not have "run" in task name
+#     # SC07 had localizer reran with run-02 due to technical issues
+#     if (bids_sub == 'sub-SC01') {
+#         sub_events <- list.files(path = paste(inputs,bids_sub, sep = '/'),
+#                          pattern = paste0(bids_sub,'_.*_' ,tasks[3], "_events\\.tsv$"), 
+#                          recursive = TRUE)
+#     }else {
+#         sub_events <- list.files(path = paste(inputs,bids_sub, sep = '/'),
+#                          pattern = paste0(bids_sub,'_.*_' ,tasks[3], "_run-01_events\\.tsv$"), 
+#                          recursive = TRUE)}
+#     
+#     for(j in seq_along(sub_events)){
+#           
+#         temp_data<-read.table(paste(inputs, bids_sub, sub_events[j],
+#                                 sep = '/'), header=TRUE)
+#         
+#         n_targets <- sum(as.numeric(temp_data$target), na.rm = TRUE)
+#         #n_responses <- temp_data %>% filter(trial_type == "response") %>% nrow()
+#         
+#         #Main subject df to wrangle, only one run now!
+#         temp_data_clean <- temp_data %>% 
+#             #get rid of trigger events
+#             filter((!grepl('trigger', trial_type))) %>% 
+#             #drop first event which is always flagged as a target
+#             slice(-1) %>% 
+#             mutate(target = recode(target, 'n/a' = '2')) %>% 
+#             mutate(target = as.numeric(target)) 
+#     
+#             #Get pairs of subsequent events to look for a soundTARGET followed by RESPONSE
+#             pairs <- data.frame(first = head(temp_data_clean$target, -1), 
+#                                 second = tail(temp_data_clean$target, -1))
+#             temp_tab <- table(pairs)
+# 
+#             accu_percent <- (temp_tab[2,3]/n_targets)*100   
+#             
+#             #ADD METADATA to the temp df
+#         
+#             accu_temp <- data.frame(subject = bids_sub, group = groups[2],
+#                                 
+#                                 task = tasks[3], accu_percent = 
+#                                     accu_percent)
+#             
+#         #Add this subject to group data
+#         
+#         df_VisualLoc_sighted_accu <- rbind(df_VisualLoc_sighted_accu, accu_temp)
+#         
+#         #clean up
+# 
+#     }
+#           rm(temp_data, temp_data_clean, pairs, temp_tab,
+#            sub_events, n_targets, bids_sub, accu_percent, i,j, accu_temp)
+# }
+#     
+    
+
+```
+
+
+## SIGHTED VISUAL LOCALIZER: TW
+
+```{r}
+#Sighted subjects 
+#sub-SC01 responded only to fix crosses, so was awake 
+subject <- c('01','02','03','04', '05', '06', '07')
+
+
+#Prepare df to store group accuracy
+df_VisualLoc_sighted_accu <- data.frame(stringsAsFactors = FALSE)
+
+#Loop across subjects 
+for(i in seq_along(subject)) {
+    
+    bids_sub <- paste0('sub-',groups[2],subject[i])
+    
+    #Grab events from this sub in this task 
+    #Sub EB01 & EB02 doesn't have _run-01_ in sequence name...
+    if(bids_sub == 'sub-SC01'){
+        sub_events <- list.files(path = paste(inputs,bids_sub, sep = '/'),
+                                 pattern = paste0(bids_sub,'_.*_' ,tasks[3],
+                                                  "_events\\.tsv$"), 
+                                 recursive = TRUE)
+    }else{
+        sub_events <- list.files(path = paste(inputs,bids_sub, sep = '/'),
+                                 pattern = paste0(bids_sub,'_.*_' ,tasks[3],
+                                                  "_run-01_events\\.tsv$"), 
+                                 recursive = TRUE)}
+    
+    for(j in seq_along(sub_events)){
+        
+        temp_data<-read.table(paste(inputs, bids_sub, sub_events[j],
+                                    sep = '/'), header=TRUE)
+        
+        #Sometimes first event is flagged as target, which is impossible. 
+        # If that's the case, drop it from the number of targets
+        if(as.numeric(temp_data$target[1]) == 1){
+             n_targets <- sum(as.numeric(temp_data$target), na.rm = TRUE)-1
+        } else {
+            n_targets <- sum(as.numeric(temp_data$target), na.rm = TRUE)
+        }
+       
+        #n_responses <- temp_data %>% filter(trial_type == "response") %>% nrow()
+        
+        #Main subject df to wrangle, only one run now!
+        temp_data_clean <- temp_data %>% 
+            #get rid of trigger events
+            filter((!grepl('trigger', trial_type))) %>% 
+            #drop first event which is always flagged as a target
+            slice(-1) %>% 
+            #mutate(soundTarget = recode(soundTarget, 'n/a' = '2')) %>% 
+            mutate(target = recode(target, 'n/a' = '2')) %>% 
+            mutate(target = as.numeric(target)) 
+        
+        #Get pairs of subsequent events to look for a soundTARGET followed by RESPONSE
+        #pairs <- data.frame(first = head(temp_data_clean$soundTarget, -1), 
+         #                   second = tail(temp_data_clean$soundTarget, -1))
+        #temp_tab <- table(pairs)
+        
+        
+        ## NEW SOLUTION: HOW TO FIND THE RESPONSES WITHIN THE TW? 
+        temp_hits <- c()
+        
+        for(iRow in 1:nrow(temp_data_clean)){
+            
+            #If this trial is a target
+            if(temp_data_clean$target[iRow]== 1){
+                
+                #Note the target onset
+                tar_onset <- temp_data_clean$onset[iRow]
+                
+                #Slice the DF based on the TW? 
+                tw_data <- temp_data_clean %>% 
+                    filter(onset <= tar_onset + accu_tw & onset > tar_onset-1)
+                
+                
+                #Check if there is a response within that time window
+                if(Reduce("|", tw_data$trial_type=='response')){
+                    
+                    hit <- 1
+                   temp_hits <- c(temp_hits, hit)
+                    #temp_hits[iRow] <- 1
+                } #else {
+                  #  hit <- 0
+                  #  temp_hits <- c(temp_hits, hit)
+                #}
+               
+            } 
+        }
+        
+        
+        #accu_percent <- (temp_tab[2,3]/n_targets)*100 
+        accu_percent <- (sum(temp_hits)/n_targets)*100
+        
+        #ADD METADATA to the temp df
+        
+        accu_temp <- data.frame(subject = bids_sub, group = groups[2],
+                                
+                                task = tasks[3], accu_percent = 
+                                    accu_percent)
+        
+        #Add this subject to group data
+        df_VisualLoc_sighted_accu <- rbind(df_VisualLoc_sighted_accu, accu_temp)
+        
+        
+    }
+}
+    
+rm(tw_data, temp_data, accu_temp, temp_data_clean)  
+    
+
+```
+
+
+
+## PLOTS
+```{r}
+
+#subject, group, task, accu_percent
+source(paste(project_path,'code','src','BLAM_functions_plots.R', sep = '/'))
+
+plot_AudioLoc_accu <- blam_accuracy_points_sum(rbind(df_AudioLoc_blind_accu, df_AudioLoc_sighted_accu))
+
+#still missing data from sub-SC04
+plot_VisualLoc_accu <- blam_accuracy_points_sum_visloc(df_VisualLoc_sighted_accu)
+
+```
+
