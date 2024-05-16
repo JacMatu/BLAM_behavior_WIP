@@ -5,25 +5,9 @@ date: '2023-09-08'
 output: html_document
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+```{r setup, include=FALSE, echo = FALSE}
+knitr::opts_chunk$set(echo = FALSE, eval = TRUE, warning = FALSE, message = FALSE)
 ```
-
-## Basic info about projects and tasks
-
-BLAM project includes following sub-projects (and their behavioural conditions and tasks)
-
-WATCHOUT: sighted subjects perform TWO tasks in motion, one audio and one visual so some responses my be to FixationTargets and some to AuditoryTargets
-
-3.  Bimidal motion auditory
-4.  Bimodal motion visual
-
-
-Not all groups have all tasks!
-
-This script loads and wrangles data for each task and subject and summarizes them in a group data frame and makes basic plots
-
-Load packages
 
 ```{r load packages, echo = FALSE}
 library(tidyverse)
@@ -38,9 +22,7 @@ library(patchwork)
 library(ez)
 ```
 
-## Define basic variables
-
-```{r, echo = FALSE}
+```{r SetVariables, echo = FALSE}
 #Setup some paths
 project_path <- '/Volumes/Slim_Reaper/Projects/BLAM_Liege_project/Behavioural_data_all' #main yoda folder for this script
 raw_repo <- '2023_Liege_BLAM_MB_raw'
@@ -60,10 +42,7 @@ rm(raw_repo)
 source(paste(project_path, 'code','src','BLAM_functions_analyses.R', sep = '/'))
 ```
 
-
-## BIMODAL MOTION AUDIO - MOTION VS STATIC
-Main analyses
-```{r}
+```{r BimodalMotAudio: condition, echo = FALSE}
 # This has to go by runs 
 
 ## FOR NOW THE SCRIPT CRASHES AS IT ASSUMES IDENTICAL NUMBER OF SUBJECTS PER GROUP
@@ -71,8 +50,13 @@ Main analyses
 #sub_SC <- c('01','02','03','04','07')
 #sub_EB<- c('01','02','03', '06','05','07')
 
-sub <- c('EB01','EB02','EB03', 'EB06','EB05','EB07',
-         'SC01','SC02','SC03','SC04','SC07')
+#sub <- c('EB01','EB02','EB03', 'EB06','EB05','EB07',
+#         'SC01','SC02','SC03','SC04','SC07')
+
+# "FINAL SAMPLE UPDATE"
+sub<- c('EB01', 'EB02', 'EB03', 'EB04', 'EB05', 'EB06', 'EB07', 'EB08', 'EB09', 'EB10', 'EB11', 
+        'SC01', 'SC02', 'SC03', 'SC04', 'SC06', 'SC07', 'SC08', 'SC09', 'SC10', 'SC11', 'SC12', 'SC13', 'SC14')
+
 
 task <- 'bimodalMotionAud'
 conditions <- c('auditory_motion', 'auditory_static')
@@ -100,7 +84,7 @@ df_BimodAudio_run_accu_cond <- data.frame(stringsAsFactors = FALSE)
                                  pattern = paste0(bids_sub,'_.*_task-' ,task, ".*_events\\.tsv$"), 
                                  recursive = TRUE)
         
-        sub_accu <- data.frame(stringsAsFactors = FALSE)
+        #sub_accu <- data.frame(stringsAsFactors = FALSE)
         
         
         
@@ -108,6 +92,8 @@ df_BimodAudio_run_accu_cond <- data.frame(stringsAsFactors = FALSE)
             
             temp_data<-read.table(paste(inputs, bids_sub, sub_events[j],
                                         sep = '/'), header=TRUE)
+            
+            sub_accu <- data.frame(stringsAsFactors = FALSE)
             
             for(c in seq_along(conditions)){
                 
@@ -172,9 +158,7 @@ df_BimodAudio_run_accu_cond <- data.frame(stringsAsFactors = FALSE)
     rm(accu_temp,sub_accu, sub_accu_mean, temp_data, temp_data_clean)   
 ```
 
-## BIMODAL MOTION AUDIO - CONDITION X AXIS
-
-```{r}
+```{r BimodalMotionAudio: condition x axis, echo = FALSE}
 # This has to go by runs 
 
 ## FOR NOW THE SCRIPT CRASHES AS IT ASSUMES IDENTICAL NUMBER OF SUBJECTS PER GROUP
@@ -182,8 +166,11 @@ df_BimodAudio_run_accu_cond <- data.frame(stringsAsFactors = FALSE)
 #sub_SC <- c('01','02','03','04','07')
 #sub_EB<- c('01','02','03', '06','05','07')
 
-sub <- c('EB01','EB02','EB03', 'EB06','EB05','EB07',
-         'SC01','SC02','SC03','SC04','SC07')
+#sub <- c('EB01','EB02','EB03', 'EB06','EB05','EB07',
+#         'SC01','SC02','SC03','SC04','SC07')
+
+sub<- c('EB01', 'EB02', 'EB03', 'EB04', 'EB05', 'EB06', 'EB07', 'EB08', 'EB09', 'EB10', 'EB11', 
+        'SC01', 'SC02', 'SC03', 'SC04', 'SC06', 'SC07', 'SC08', 'SC09', 'SC10', 'SC11', 'SC12', 'SC13', 'SC14')
 
 task <- 'bimodalMotionAud'
 conditions <- c('auditory_motion', 'auditory_static')
@@ -212,11 +199,11 @@ df_BimodAudio_run_accu_cond_axis <- data.frame(stringsAsFactors = FALSE)
                                  pattern = paste0(bids_sub,'_.*_task-' ,task, ".*_events\\.tsv$"), 
                                  recursive = TRUE)
         
-        sub_accu <- data.frame(stringsAsFactors = FALSE)
-        
         
         
         for(j in seq_along(sub_events)){
+            
+            sub_accu <- data.frame(stringsAsFactors = FALSE)
             
             temp_data<-read.table(paste(inputs, bids_sub, sub_events[j],
                                         sep = '/'), header=TRUE)
@@ -287,48 +274,9 @@ df_BimodAudio_run_accu_cond_axis <- data.frame(stringsAsFactors = FALSE)
     rm(accu_temp,sub_accu, sub_accu_mean, temp_data, temp_data_clean)   
 ```
 
-Summary stats
-```{r}
-summary_BimodAudio_cond <- df_BimodAudio_summ_accu_cond %>% 
-    group_by(group, cond) %>% 
-    dplyr::summarise(
-        mean = mean(accu_percent), 
-        sd = mean(accu_percent)
-    )
+```{r BimodalMotionVis: condition, echo = FALSE}
 
-summary_BimodAudio_axis <- df_BimodAudio_summ_accu_cond_axis %>% 
-    group_by(group, cond, axis) %>% 
-    dplyr::summarise(
-        mean = mean(accu_percent), 
-        sd = mean(accu_percent)
-    )
-```
-
-
-Anovas
-```{r}
-ANOVA_BimodalAudio_conditions <- ezANOVA(
-    data = df_BimodAudio_summ_accu_cond,
-    dv = accu_percent,
-    wid = subject,
-    within = cond,
-    between = group)
-
-
-ANOVA_BimodalAudio_conditions_axis <- ezANOVA(
-    data = df_BimodAudio_summ_accu_cond_axis,
-    dv = accu_percent,
-    wid = subject,
-    within = .(cond, axis), 
-    between = group)
-
-```
-
-
-## BIMODAL MOTION VISUAL- MOTION VS STATIC
-```{r}
-
-subject <- c('01','02','03', '04','07')
+subject <- c('01','02','03','04', '06', '07', '08', '09', '10', '11', '12', '13', '14')
 task <- 'bimodalMotionVis'
 conditions <- c('visual_motion', 'visual_static')
 
@@ -347,12 +295,11 @@ for(i in seq_along(subject)) {
                      pattern = paste0(bids_sub,'_.*_task-' ,task, ".*_events\\.tsv$"), 
                      recursive = TRUE)
     
-    sub_accu <- data.frame(stringsAsFactors = FALSE)
-    
-    
     
     for(j in seq_along(sub_events)){
-          
+        
+        sub_accu <- data.frame(stringsAsFactors = FALSE)  
+        
         temp_data<-read.table(paste(inputs, bids_sub, sub_events[j],
                                 sep = '/'), header=TRUE)
         
@@ -411,12 +358,10 @@ for(i in seq_along(subject)) {
     #Small cleanup
     rm(accu_temp,sub_accu, sub_accu_mean, temp_data, temp_data_clean)   
 ```
- 
 
-## BIMODAL MOTION VISUAL- CONDITION x AXIS
-```{r}
+```{r BimodalMotionVis: condition x axis, echo = FALSE}
 
-subject <- c('01','02','03', '04','07')
+subject <- c('01','02','03','04', '06', '07', '08', '09', '10', '11', '12', '13', '14')
 task <- 'bimodalMotionVis'
 conditions <- c('visual_motion', 'visual_static')
 axis_list <- c('vertical', 'horizontal') 
@@ -435,11 +380,10 @@ for(i in seq_along(subject)) {
                              pattern = paste0(bids_sub,'_.*_task-' ,task, ".*_events\\.tsv$"), 
                              recursive = TRUE)
     
-    sub_accu <- data.frame(stringsAsFactors = FALSE)
-    
-    
     
     for(j in seq_along(sub_events)){
+        
+         sub_accu <- data.frame(stringsAsFactors = FALSE)
         
         temp_data<-read.table(paste(inputs, bids_sub, sub_events[j],
                                     sep = '/'), header=TRUE)
@@ -506,18 +450,74 @@ for(i in seq_along(subject)) {
 #Small cleanup
 rm(accu_temp,sub_accu, sub_accu_mean, temp_data, temp_data_clean)   
 ```
- 
+
+```{r SummaryStats, echo = FALSE}
+summary_BimodAudio_cond <- df_BimodAudio_summ_accu_cond %>% 
+    group_by(group, cond) %>% 
+    dplyr::summarise(
+        mean = mean(accu_percent), 
+        sd = sd(accu_percent)
+    )
+
+summary_BimodAudio_axis <- df_BimodAudio_summ_accu_cond_axis %>% 
+    group_by(group, cond, axis) %>% 
+    dplyr::summarise(
+        mean = mean(accu_percent), 
+        sd = sd(accu_percent)
+    )
+
+summary_BimodVis_cond <- df_bimodMotVis_sighted_summ_accu_cond %>% 
+    group_by(group, cond) %>% 
+    dplyr::summarise(
+        mean = mean(accu_percent), 
+        sd = sd(accu_percent))
+
+summary_BimodVis_axis <- df_bimodMotVis_sighted_summ_accu_cond_axis %>% 
+    group_by(group, cond, axis) %>% 
+    dplyr::summarise(
+        mean = mean(accu_percent), 
+        sd = sd(accu_percent))
+```
+
+```{r ANOVAS, echo = FALSE}
+## AUDITORY MOTION
+
+ANOVA_BimodalAudio_conditions <- ezANOVA(
+    data = df_BimodAudio_summ_accu_cond,
+    dv = accu_percent,
+    wid = subject,
+    within = cond,
+    between = group)
 
 
-clean up
-```{r}
+ANOVA_BimodalAudio_conditions_axis <- ezANOVA(
+    data = df_BimodAudio_summ_accu_cond_axis,
+    dv = accu_percent,
+    wid = subject,
+    within = .(cond, axis), 
+    between = group)
+
+
+## VISUAL MOTION
+ANOVA_BimodalVis_conditions <- ezANOVA(
+    data = df_bimodMotVis_sighted_run_accu_cond, 
+    dv = accu_percent,
+    wid = subject,
+    within = cond)
+
+ANOVA_BimodalVis_conditions_axis <- ezANOVA(
+    data = df_bimodMotVis_sighted_run_accu_cond_axis, 
+    dv = accu_percent,
+    wid = subject,
+    within = .(cond, axis))
+
+```
+
+```{r CleanUp, echo = FALSE}
 rm(pairs, accu_temp, sub_accu, sub_accu_mean, temp_data, temp_data_clean)
 ```
 
-## ----- PLOTS -----
-
-Plots for each condition
-```{r}
+```{r Plots: condition, echo = FALSE}
 source(paste(project_path,'code','src','BLAM_functions_plots.R', sep = '/'))
 
 
@@ -532,23 +532,28 @@ lab_vis <- c('Motion (V)', 'Static (V)')
 # AVERAGE
 plot_BimodAudio_blind <- df_BimodAudio_summ_accu_cond %>% 
     filter(group == "EB") %>% 
-    blam_accuracy_points_sum_conditions_group(., lab_aud, dark_colors[1])
+    blam_accuracy_points_sum_conditions_group(., lab_aud, dark_colors[1]) +
+    ggtitle(label = 'Blind') 
 
 plot_BimodAudio_sighted<- df_BimodAudio_summ_accu_cond %>% 
     filter(group == "SC") %>% 
-    blam_accuracy_points_sum_conditions_group(., lab_aud, dark_colors[2])
+    blam_accuracy_points_sum_conditions_group(., lab_aud, dark_colors[2])+
+    ggtitle(label = 'Sighted')
 
 plot_BimodAudio <- plot_BimodAudio_blind + plot_BimodAudio_sighted
+
 rm(plot_Audio_V1_accu_run_blind, plot_Audio_V1_accu_run_sighted)
 
 # BY RUN
 plot_BimodAudio_accu_run_blind <- df_BimodAudio_run_accu_cond %>% 
     filter(group=='EB') %>% 
-    blam_accuracy_points_run_cond(.)
+    blam_accuracy_points_run_cond(.) +
+    ggtitle(label = 'Blind')
 
 plot_BimodAudio_accu_run_sighted <- df_BimodAudio_run_accu_cond %>% 
     filter(group=='SC') %>% 
-    blam_accuracy_points_run_cond(.)
+    blam_accuracy_points_run_cond(.) +
+    ggtitle(label = 'Sighted')
 
 plot_BimodAudio_accu_run <- plot_BimodAudio_accu_run_blind + plot_BimodAudio_accu_run_sighted 
 rm(plot_BimodAudio_accu_run_blind, plot_BimodAudio_accu_run_sighted)
@@ -566,8 +571,7 @@ plot_BimodVis_accu_run_sighted <- df_bimodMotVis_sighted_run_accu_cond %>%
 ```
 
 
-Plots for each CONDITION AND AXIS
-```{r}
+```{r Plots: condition x axis, echo = FALSE}
 source(paste(project_path,'code','src','BLAM_functions_plots.R', sep = '/'))
 
 
@@ -587,7 +591,7 @@ plot_BimodAudio_sighted_axis <- df_BimodAudio_summ_accu_cond_axis %>%
     blam_accuracy_points_bimodal_axis(., lab_axis, dark_colors[2])
 
 plot_BimodalAudio_axis <- plot_BimodAudio_blind_axis + plot_BimodAudio_sighted_axis
-rm(plot_BimodAudio_sighted_axis, plot_BimodAudio_blind_axis)
+#rm(plot_BimodAudio_sighted_axis, plot_BimodAudio_blind_axis)
 
 
 plot_BimodalVis_axis <-  blam_accuracy_points_bimodal_axis(df_bimodMotVis_sighted_summ_accu_cond_axis, lab_axis, dark_colors[2])
@@ -595,8 +599,147 @@ plot_BimodalVis_axis <-  blam_accuracy_points_bimodal_axis(df_bimodMotVis_sighte
 ```
 
 
-#----------------------------- TESTS ------------------------------
+```{r Plots: flag outliers, echo = FALSE}
+#AudioMotion
+plot_BimodAudio_outliers <- plot_BimodAudio +
+    annotate("text", 
+             x = 'auditory_motion',
+             y = 30, 
+             label = 'sub-SC03')
 
 
+#AudioMotion: Axis
+plot_BimodalAudio_axis_outliers <- plot_BimodalAudio_axis
+```
+
+#BLAM 7T Behavioural analyses: Bimodal Motion
+
+## Subjects:
+11 Congenitally Blind 
+13 Sighted Controls
+(Some are excluded from analyses in certain tasks due to lack of responses)
+
+## List of tasks: 
+### Auditory Motion
+Stimuli:
+
+Experimental design:
+
+Conditions & Task(s)
+
+- *Motion* (**Press the button for repetition of sound direction**)
+- *Static* (**Press the button for repeated double short bursts**)
+
+Subject exclusions
 
 
+### Visual Motion
+Stimuli:
+
+Experimental design:
+
+Conditions & Task(s)
+
+- *Motion* (**Press the button for repetition of sound direction**)
+- *Static* (**Press the button for repeated double short bursts**)
+
+Subject exclusions: 
+
+
+## Auditory Motion: behavioural accuracies
+
+### Axis of motion pulled together (motion vs static)
+
+Descriptive statistics across groups and conditions [% correct]
+
+```{r AudioDescStats}
+summary_BimodAudio_cond
+```
+
+```{r AudioPlotCondBlind}
+plot_BimodAudio_blind + ggtitle(label = 'blind')
+```
+
+```{r AudioPlotCondSig}
+plot_BimodAudio_sighted + 
+    ggtitle(label = 'sighted') +
+    annotate("text", 
+             x = 'auditory_motion',
+             y = 30, 
+             label = 'sub-SC03')
+```
+
+
+ANOVA 2 (group) x 2 (condition)
+```{r AudioANOVACond}
+ANOVA_BimodalAudio_conditions
+```
+
+### Axis of motion separated (vertical vs horizontal)
+
+Descriptive stats
+```{r AudioAxisDescStats}
+summary_BimodAudio_axis
+```
+
+
+```{r AudioAxisPlotBlind}
+plot_BimodAudio_blind_axis +ggtitle(label = 'Blind')
+```
+
+```{r AudioAxisPlotSig}
+plot_BimodAudio_sighted_axis +ggtitle(label = 'Sighted')
+```
+
+0% accuracy in vertical motion:
+
+- sub-EB10
+- sub-SC02
+- sub-SC03
+
+ANOVA 2(group: blind + sighted) x 2 (condition: motion + static) x 2 (axis: horizontal + vertical)
+```{r AudioAnovaAxis}
+ANOVA_BimodalAudio_conditions_axis
+```
+
+Motion is harder than static (obvious)
+Verical is harder than horizontal (obvious)
+Interaction Vertical is harder but only in motion (obvious)
+
+CRUCIALLLY: no group differences!
+
+## Visual Motion: behavioural accuracies
+### Axis of motion pulled together (motion vs static)
+
+Descriptive statistics across groups and conditions [% correct]
+
+```{r VisDescStats}
+summary_BimodVis_cond
+```
+
+```{r VisPlotCond}
+plot_BimodVis_sighted
+```
+
+ANOVA 2 (group) x 2 (condition)
+```{r VisANOVACond}
+ANOVA_BimodalVis_conditions
+```
+Motion marginally harder than static 
+
+### Axis of motion separated (vertical vs horizontal)
+
+```{r VisAxisDescStats}
+summary_BimodVis_axis
+```
+
+```{r VisAxisPlot}
+plot_BimodalVis_axis
+```
+
+ANOVA: 2(condition) x 2 (axis) in sighted
+```{r VisANOVAAxis}
+ANOVA_BimodalVis_conditions_axis
+```
+
+No effects of axis of motion (just marginal condition)

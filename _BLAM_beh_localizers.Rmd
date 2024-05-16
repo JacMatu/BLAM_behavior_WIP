@@ -2,30 +2,15 @@
 title: "BLAM_Liege_beh_analyses"
 author: "Jacek Matuszewski"
 date: '2023-09-08'
-output: html_document
+output:
+  html_document: default
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = FALSE, eval = TRUE, warning = FALSE, message = FALSE)
 ```
 
-## Basic info about projects and tasks
-
-BLAM project includes following sub-projects (and their behavioural conditions and tasks)
-
-WATCHOUT: sighted subjects perform TWO tasks in motion, one audio and one visual so some responses my be to FixationTargets and some to soundTargets
-
-1.  Auditory motion localizer (Blind + Sighted)
-2.  Visual motion localizer (Sighted)
-3.  MST localizer (Sighted)
-
-Not all groups have all tasks!
-
-This script loads and wrangles data for each task and subject and summarizes them in a group data frame and makes basic plots
-
-Load packages
-
-```{r load packages, echo = FALSE}
+```{r load packages, echo = FALSE, include = FALSE}
 library(tidyverse)
 library(lubridate)
 library(stringr)
@@ -37,11 +22,11 @@ library(cowplot)
 library(patchwork)
 ```
 
-# Define basic variables
-
-```{r}
+```{r Set variables, echo = FALSE}
 #Setup some paths
 project_path <- '/Volumes/Slim_Reaper/Projects/BLAM_Liege_project/Behavioural_data_all' #main yoda folder for this script
+#raw_repo <- '2023_Liege_BLAM_MB_raw'
+# January update: logs from session 02, 03 and 04 are not in raw GIN repo yet so this is a backup manual fusion with OneDrive logs
 raw_repo <- '2023_Liege_BLAM_MB_raw'
 inputs <- paste(project_path, 'inputs', raw_repo, sep = '/') #datalad raw repo in inputs
 deriv_r <- paste(project_path, 'outputs','derivatives', 'R_beh_data', sep = '/') #basic output for this script
@@ -58,10 +43,7 @@ rm(raw_repo)
 source(paste(project_path, 'code','src','BLAM_functions_analyses.R', sep = '/'))
 ```
 
-# AUDIO LOCALIZER
-
-## Blind + Sighted
-```{r}
+```{r Audio Localizer: Data Wrangling, echo = FALSE}
 # Grab the analyses functions
 source(paste(project_path, 'code','src','BLAM_functions_analyses.R', sep = '/'))
 
@@ -73,11 +55,17 @@ source(paste(project_path, 'code','src','BLAM_functions_analyses.R', sep = '/'))
 ## TEST THE SCRIPT WITH ALL SUBJECTS PARTICIPATING IN THE STUDY! 
 # IF YOU WANT TO EXCLUDE THE OBVIOUS OUTLIERS, YOU CAN ALSO DO IT LATER
 
-sub_SC <- c('01','02','03','04', '06', '07')
-sub_EB<- c('01','02','03','04', '05','07')
-groups <- c('EB', 'SC')
+#SEPTEMBER SUBJECTS
+#sub_SC <- c('01','02','03','04', '06', '07')
+#sub_EB<- c('01','02','03','04', '05','07')
+
+#JANUARY SUBJECTS 
+# EB02 DIDM'T RESPOND!
+sub_SC <- c('01','02','03','04', '06', '07', '08', '09', '10', '11', '12', '13', '14')
+sub_EB<- c('01','03','04','06', '05','07', '08', '09', '10', '11')
 task <- 'auditoryLocalizer'
 conditions <- c('motion','static')
+groups <- c('EB', 'SC')
 
 # Prepare an empty df 
 df_AudioLoc_accu_cond <- data.frame(stringsAsFactors = FALSE)
@@ -85,8 +73,18 @@ df_AudioLoc_accu_cond <- data.frame(stringsAsFactors = FALSE)
 
 #Loop across subjects 
 for(g in seq_along((groups))){
-    for(i in seq_along(sub_SC)) {
-        
+    #for(i in seq_along(sub_SC)) {
+    
+    #depending on the group, pick the correct subjects list to loop across
+    #I'm pretty sure this can be done more elegantly
+    if(groups[g]=='EB'){
+        curr_subs <- sub_EB
+    }else if(groups[g] == 'SC'){
+        curr_subs <- sub_SC
+    }
+    
+    #loop across subjects
+    for(i in seq_along(curr_subs)) {
         #Pick a subject from correct list 
         if(groups[g]=='EB'){
             bids_sub <- paste0('sub-',groups[g],sub_EB[i])
@@ -101,20 +99,14 @@ for(g in seq_along((groups))){
                                                   task, '.*',
                                                   "_events\\.tsv$"),
                                  recursive = TRUE) %>%
+            #Drop the mag and phase events from the list
             str_subset(pattern = ".*_part-mag_events\\.tsv$", negate = TRUE) %>%
             str_subset(pattern = ".*_part-phase_events\\.tsv$",negate = TRUE)
         
-        #For some reason EB03 & SC02 have 2 runs of AudioLocalizer?
-        # For sub-EB03 take the one from ses-02
-        # For sub-SC02 take the one from ses-03, BUT WE DON'T KNOW WHY
-        # and maybe we will change it to the first one!
-            
-        if(bids_sub == 'sub-EB03' | bids_sub == 'sub-SC02' ){
-            temp_data<-read.table(paste(inputs, bids_sub, sub_events[2],
-                                        sep = '/'), header=TRUE)
-        }else{
+        
+
             temp_data<-read.table(paste(inputs, bids_sub, sub_events[1],
-                                        sep = '/'), header=TRUE)}
+                                        sep = '/'), header=TRUE)
             
             
             for(c in seq_along(conditions)){
@@ -163,21 +155,16 @@ df_group_AudioLoc <- df_AudioLoc_accu_cond %>%
     )
 ```
 
-## Blind + Sighted: Fixation targets
-```{r}
+```{r Audio localizer: Fix Targets Data Wrangling, echo = FALSE}
 # Grab the analyses functions
 source(paste(project_path, 'code','src','BLAM_functions_analyses.R', sep = '/'))
 
 
-# define variables for this task
-#sub_EB <- c('01','03','04', '05','06','07')
-#sub_SC <- c('02','03','04', '05','06', '07')
 
 ## TEST THE SCRIPT WITH ALL SUBJECTS PARTICIPATING IN THE STUDY! 
 # IF YOU WANT TO EXCLUDE THE OBVIOUS OUTLIERS, YOU CAN ALSO DO IT LATER
 
-sub_SC <- c('01','02','03','04', '06', '07')
-#sub_EB<- c('01','02','03','04', '05','07')
+sub_SC <- c('01','02','03','04', '06', '07', '08', '09', '10', '11', '12', '13', '14')
 groups <- c('SC')
 task <- 'auditoryLocalizer'
 #conditions <- c('motion','static')
@@ -207,17 +194,9 @@ for(g in seq_along((groups))){
             str_subset(pattern = ".*_part-mag_events\\.tsv$", negate = TRUE) %>%
             str_subset(pattern = ".*_part-phase_events\\.tsv$",negate = TRUE)
         
-        #For some reason EB03 & SC02 have 2 runs of AudioLocalizer?
-        # For sub-EB03 take the one from ses-02
-        # For sub-SC02 take the one from ses-03, BUT WE DON'T KNOW WHY
-        # and maybe we will change it to the first one!
-            
-        if(bids_sub == 'sub-EB03' | bids_sub == 'sub-SC02' ){
-            temp_data<-read.table(paste(inputs, bids_sub, sub_events[2],
-                                        sep = '/'), header=TRUE)
-        }else{
+
             temp_data<-read.table(paste(inputs, bids_sub, sub_events[1],
-                                        sep = '/'), header=TRUE)}
+                                        sep = '/'), header=TRUE)
             
             
             #for(c in seq_along(conditions)){
@@ -267,12 +246,7 @@ df_group_AudioLoc_FIX <- df_AudioLoc_accu_FIX %>%
     )
 ```
 
-
-
-
-# VISUAL LOCALIZERS 
-Both Vis + MT / MST
-```{r}
+```{r Visual Localizers: data wrangling, echo = FALSE}
 # Grab the analyses functions
 source(paste(project_path, 'code','src','BLAM_functions_analyses.R', sep = '/'))
 
@@ -287,11 +261,9 @@ source(paste(project_path, 'code','src','BLAM_functions_analyses.R', sep = '/'))
 
 
 # WHERE ARE THE EVENT FILES FROM sub-SC04?!
-sub_SC <- c('01','02','03','04', '05','06', '07')
+sub_SC <- c('01','02','03','04', '05','06', '07', '08', '09', '10', '11', '12', '13', '14')
 
 task <- c('visualLocalizer','mtMstLocalizer')
-#conditions <- c('motion','static')
-
 # Prepare an empty df 
 df_VisualLoc_accu <- data.frame(stringsAsFactors = FALSE)
 
@@ -305,6 +277,12 @@ for(g in seq_along((groups))){
         bids_sub <- paste0('sub-',groups[g],sub_SC[i])
         
         for(t in seq_along(task)){
+            
+            if(task[t] == 'visualLocalizer'){
+                conditions = c('motion', 'static')
+            }else if(task[t] == 'mtMstLocalizer'){
+                conditions = 'motion'
+            }
             
             #Grab events from this sub in this task
             # get rid of what looks like field map events?
@@ -323,12 +301,13 @@ for(g in seq_along((groups))){
                                             sep = '/'), header=TRUE)
                 
                 
-                #for(c in seq_along(conditions)){
+                for(c in seq_along(conditions)){
                 
                 #Main subject df to wrangle, only one run now!
                 temp_data_clean <- temp_data %>% 
-                    #get rid of trigger events and only pic given condition! 
+                    #get rid of trigger events and only pick given condition! 
                     filter((!grepl('trigger', trial_type))) %>% 
+                    filter(trial_type == conditions[c] | trial_type == 'response') %>% 
                     #drop first event which is always flagged as a target?
                     # slice(-1) %>% 
                     mutate(target = recode(target, 'n/a' = '0')) %>% 
@@ -343,13 +322,14 @@ for(g in seq_along((groups))){
                 
                 accu_temp <- data.frame(subject = bids_sub, 
                                         group = groups[g],
-                                        #condition = conditions[c],
+                                        cond = conditions[c],
                                         task = task[t], 
                                         accu_percent = accu_percent)
                 
                 #Add this subject to group data
                 df_VisualLoc_accu <- rbind(df_VisualLoc_accu, accu_temp)
                 
+                }
             }
         }
     }
@@ -362,17 +342,36 @@ rm(accu_temp, temp_data, temp_data_clean)
 df_group_VisualLoc <- df_VisualLoc_accu %>% 
     #filterout outliers :) 
     #filter(subject != 'sub-EB02' & subject != 'sub-SC01') %>% 
-    group_by(task) %>% 
+    group_by(task, cond) %>% 
     dplyr::summarise(
         mean_accu = mean(accu_percent),
         sd_accu = sd(accu_percent)
     )
+
+
 ```
 
+```{r ANOVAS, echo = FALSE}
+library(ez)
+ANOVA_AudioLoc <- ezANOVA(
+    data = df_AudioLoc_accu_cond, 
+    dv = accu_percent,
+    wid = subject,
+    within = cond,
+    between = group
+)
 
-# PLOTS! 
+ANOVA_VisLoc <-  df_VisualLoc_accu %>% 
+    filter(task == 'visualLocalizer') %>% 
+    ezANOVA(
+    data = ., 
+    dv = accu_percent, 
+    wid = subject, 
+    within = .(cond)
+)
+```
 
-```{r}
+```{r Plots, echo = FALSE}
 source(paste(project_path,'code','src','BLAM_functions_plots.R', sep = '/'))
 
 dark_colors <- brewer.pal(n=3, name = "Dark2") 
@@ -380,7 +379,7 @@ light_colors <- brewer.pal(n=3, name = "Pastel2")
 
 labels_aud <- c('Motion (A)', 'Static (A)')
 
-labels_vis <- c('Vis Loc', 'MT/MST Loc')
+labels_vis <- c('Motion (V)', 'Static (V)')
 
 ## DFs: remove outliers! 
 df_AudioLoc_accu_cond_blind <- df_AudioLoc_accu_cond %>% 
@@ -390,187 +389,170 @@ df_AudioLoc_accu_cond_sighted <- df_AudioLoc_accu_cond %>%
 
 
 df_VisualLoc_accu_plot <- df_VisualLoc_accu %>% 
-    mutate(cond = task)
+    filter(task == 'visualLocalizer')
+
+df_MT_MST_accu_plot <- df_VisualLoc_accu %>% 
+    filter(task == 'mtMstLocalizer') 
 
 ## PLOT AUDIO 
 plot_Audio_blind <- blam_accuracy_points_sum_conditions_group(df_AudioLoc_accu_cond_blind, 
                                                               labels_aud, 
                                                               dark_colors[1]) +
     scale_y_continuous(name = 'Accuracy [%]', 
-                       limits = c(35,100))
+                       limits = c(35,100))+ 
+    ggtitle(label = 'Blind')
 
 plot_Audio_sig <- blam_accuracy_points_sum_conditions_group(df_AudioLoc_accu_cond_sighted, 
                                                               labels_aud, 
                                                               dark_colors[2])+
     scale_y_continuous(name = 'Accuracy [%]', 
-                       limits = c(35,100))
+                       limits = c(35,100)) + 
+    ggtitle(label = 'Sighted')
 
 plot_AudioLoc <- plot_Audio_blind  + plot_Audio_sig
 
 #BONUS: PLOT AUDIO FOR FIX TARGETS COLOR CHANGES IN SIGHTED
 plot_Audio_fix_sig <- blam_accuracy_points_sum_group(df_AudioLoc_accu_FIX, dark_colors[2])
 
-rm(plot_Audio_blind, plot_Audio_sig)
+#rm(plot_Audio_blind, plot_Audio_sig)
 
 ## PLOT VISUAL 
 plot_VisualLoc <- blam_accuracy_points_sum_conditions_group(df_VisualLoc_accu_plot, 
                                                               labels_vis, 
                                                               dark_colors[2])
+
+plot_MT_MSTLoc <- blam_accuracy_points_sum_conditions_group(df_MT_MST_accu_plot, 
+                                                              labels_vis, 
+                                                              dark_colors[2])
+```
+
+```{r Plots: flag outliers with labels, echo = FALSE}
+
+#Audio localizer labels: SC03 + SC06
+plot_AudioLoc_outliers <- plot_Audio_blind  + (plot_Audio_sig +
+                                                   annotate("text", 
+                                                            x = 'motion', 
+                                                            y = 41, 
+                                                            label = 'sub-SC06') +
+                                                   annotate("text", 
+                                                            x = 'motion', 
+                                                            y = 70, 
+                                                            label = 'sub-SC03')) 
+
+#Visual localizer: sub-SC06
+plot_MT_MSTLoc_outliers <- plot_MT_MSTLoc + 
+    annotate("text", 
+             x = 'motion',
+             y = 42, 
+             label = 'sub-SC06') +
+    ggtitle(label = 'MT/MST Localizer')
+
+plot_VisualLoc_outliers <- plot_VisualLoc +
+        annotate("text", 
+             x = 'static',
+             y = 65, 
+             label = 'sub-SC06') +
+    ggtitle(label = 'Visual Motion Localizer')
+```
+
+#BLAM 7T Behavioural analyses: Localizers
+
+## Subjects:
+11 Congenitally Blind 
+13 Sighted Controls
+(Some are excluded from analyses in certain tasks due to lack of responses)
+
+## List of tasks: 
+### Auditory Motion Localizer
+Stimuli:
+
+Experimental design:
+
+Conditions & Task(s)
+
+- *Motion* (**Press the button for repetition of sound direction**)
+- *Static* (**Press the button for repeated double short bursts**)
+
+Subject exclusions
+sub-SC05 (data not acquired)
+sub-EB02 (no responses)
+
+### Visual Motion Localizer
+Stimuli:
+
+Experimental design:
+
+Conditions & Task(s)
+
+- *Motion* (**Press the button for repetition of sound direction**)
+- *Static* (**Press the button for repeated double short bursts**)
+
+Subject exclusions: 
+sub-SC05 (data not acquired)
+
+
+### MT/MST Localizer 
+Stimuli:
+
+Experimental design:
+
+Conditions & Task(s)
+
+- *Motion* (**Press the button for shorter event**)
+
+Subject exclusions: 
+sub-SC05 (data not acquired)
+
+
+## Analytical approach:
+Given no 1-to-1 matching between target events and responses the approach here
+was to use the *time window* for correct answers, i.e., monitoring whether the 
+response occurred within *3 seconds* of the target. 
+
+Plots include individual values and group mean +- standard error. 
+
+Group / conditions / axis of motion differences are tested with ANOVAs. 
+
+
+## Auditory motion loc behavioural accuracy
+
+Descriptive stats: group level [% correct]
+```{r AudioLoc: descriptives}
+df_group_AudioLoc
+```
+
+Plot (flagging outliers)
+```{r AudioLoc: plot}
+plot_AudioLoc_outliers
+```
+
+ANOVA 2 (group: blind + sighted) x 2 (condition: motion + static)
+```{r AudioLoc: anova}
+ANOVA_AudioLoc
+```
+While there are 2 sighted outliers with worse performance, there are no differences between blind and sighted and between motion and static conditions. 
+
+
+## Visual Motion localizers (regular + MT/MST)
+Descriptive stats: group level [% correct]
+```{r VisLoc: descriptives}
+df_group_VisualLoc
+```
+
+Plot (flagging outliers)
+
+```{r VisLoc: plot}
+plot_VisualLoc_outliers
+```
+
+```{r MT/MSTLoc: plot}
+plot_MT_MSTLoc_outliers
 ```
 
 
-
-
-
-
-
-
-
-
-
-##--------------------------  ARCHIVE -----------------------------------------
-## SMALL LOOP TEST! 
-
-
-```{r}
-# Grab the analyses functions
-source(paste(project_path, 'code','src','BLAM_functions_analyses.R', sep = '/'))
-
-
-# define variables for this task
-subjects <- c('01','03','04', '05','06','07')
-task <- 'auditoryLocalizer'
-group <- 'EB'
-
-
-df_AudioLoc_blind_accu <- data.frame(stringsAsFactors = FALSE)
-
-
-
-
-#Loop across subjects 
-for(i in seq_along(subjects)) {
-    
-    bids_sub <- paste0('sub-',groups[1],subjects[i])
-    
-    #Grab events from this sub in this task
-    # get rid of what looks like field map events?
-    sub_events <- list.files(path = paste(inputs,bids_sub, sep = '/'),
-                             pattern = paste0(bids_sub,'_.*_' ,'task-',
-                                              task, '.*',
-                                              "_events\\.tsv$"),
-                             recursive = TRUE) %>%
-        str_subset(pattern = ".*_part-mag_events\\.tsv$", negate = TRUE) %>%
-        str_subset(pattern = ".*_part-phase_events\\.tsv$",negate = TRUE)
-    
-    
-    for(j in seq_along(sub_events)){
-        
-        temp_data<-read.table(paste(inputs, bids_sub, sub_events[j],
-                                    sep = '/'), header=TRUE)
-        
-        
-        #Main subject df to wrangle, only one run now!
-        temp_data_clean <- temp_data %>% 
-            #get rid of trigger events
-            filter((!grepl('trigger', trial_type))) %>% 
-            #drop first event which is always flagged as a target
-            slice(-1) %>% 
-            #mutate(soundTarget = recode(soundTarget, 'n/a' = '2')) %>% 
-            mutate(soundTarget = recode(soundTarget, 'n/a' = '0')) %>% 
-            mutate(soundTarget = as.numeric(soundTarget)) %>% 
-            #Unify target column names for function 
-            mutate(target_func = soundTarget)
-        
-        # Function call saves space! 
-        accu_percent <- blam_accuracy_tw(temp_data_clean, accu_tw)
-        
-        #ADD METADATA to the temp df
-        
-        accu_temp <- data.frame(subject = bids_sub, group = groups[1],
-                                condition = 'average',
-                                task = tasks[2], accu_percent = 
-                                    accu_percent)
-        
-        #Add this subject to group data
-        df_AudioLoc_blind_accu <- rbind(df_AudioLoc_blind_accu, accu_temp)
-        
-        
-    }
-}
-
+ANOVA (Vis motion only, since there is no static condition in MT/MST localizer. Equvalent of a T test)
+```{r VisLoc: anova}
+ANOVA_VisLoc
 ```
 
-## SMALL LOOP TEST: CONDITIONS
-
-
-```{r}
-# Grab the analyses functions
-source(paste(project_path, 'code','src','BLAM_functions_analyses.R', sep = '/'))
-
-
-# define variables for this task
-subj <- c('01','03','04', '05','06','07')
-task <- 'auditoryLocalizer'
-conditions <- c('motion','static')
-#group <- 'EB'
-
-
-df_AudioLoc_blind_accu_cond <- data.frame(stringsAsFactors = FALSE)
-
-
-#Loop across subjects 
-for(i in seq_along(subjects)) {
-    
-    bids_sub <- paste0('sub-',groups[1],subjects[i])
-    
-    #Grab events from this sub in this task
-    # get rid of what looks like field map events?
-    sub_events <- list.files(path = paste(inputs,bids_sub, sep = '/'),
-                             pattern = paste0(bids_sub,'_.*_' ,'task-',
-                                              task, '.*',
-                                              "_events\\.tsv$"),
-                             recursive = TRUE) %>%
-        str_subset(pattern = ".*_part-mag_events\\.tsv$", negate = TRUE) %>%
-        str_subset(pattern = ".*_part-phase_events\\.tsv$",negate = TRUE)
-    
-    
-    for(j in seq_along(sub_events)){
-        
-        temp_data<-read.table(paste(inputs, bids_sub, sub_events[j],
-                                    sep = '/'), header=TRUE)
-        
-        
-        for(c in seq_along(conditions)){
-        
-        #Main subject df to wrangle, only one run now!
-        temp_data_clean <- temp_data %>% 
-            #get rid of trigger events
-            filter(trial_type == conditions[c] | trial_type == 'response') %>% 
-            #drop first event which is always flagged as a target
-            slice(-1) %>% 
-            #mutate(soundTarget = recode(soundTarget, 'n/a' = '2')) %>% 
-            mutate(soundTarget = recode(soundTarget, 'n/a' = '0')) %>% 
-            mutate(soundTarget = as.numeric(soundTarget)) %>% 
-            #Unify target column names for function 
-            mutate(target_func = soundTarget)
-        
-        # Function call saves space! 
-        accu_percent <- blam_accuracy_tw(temp_data_clean, accu_tw)
-        
-        #ADD METADATA to the temp df
-        
-        accu_temp <- data.frame(subject = bids_sub, group = groups[1],
-                                condition = conditions[c],
-                                task = tasks[2], accu_percent = 
-                                    accu_percent)
-        
-        #Add this subject to group data
-        df_AudioLoc_blind_accu_cond <- rbind(df_AudioLoc_blind_accu_cond, accu_temp)
-        
-        }
-    }
-}
-
-```
-
+sub SC-06 is performing worse, but there are no differences between conditions. 

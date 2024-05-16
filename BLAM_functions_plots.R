@@ -306,7 +306,8 @@ blam_accuracy_points_sum_conditions_group <- function (data, lab, colour) {
                      #color = rep(c(dark_colors[1], dark_colors[2]),times =4),
                      show.legend = FALSE) +
         scale_color_manual(values = rep(colour,times =4)) +
-        scale_y_continuous(name = "Accuracy [%]") +
+        scale_y_continuous(name = "Accuracy [%]", 
+                           limits = c(0, 100)) +
         scale_x_discrete(name = "Conditions", 
                          labels = lab) +
         #labs(color="Group") +
@@ -361,7 +362,8 @@ blam_accuracy_points_bimodal_axis <- function (data, lab, colour) {
                      #color = rep(c(dark_colors[1], dark_colors[2]),times =4),
                      show.legend = FALSE) +
         scale_color_manual(values = rep(colour,times =4)) +
-        scale_y_continuous(name = "Accuracy [%]") +
+        scale_y_continuous(name = "Accuracy [%]", 
+                           limits = c(0, 100)) +
         scale_x_discrete(name = "Conditions", 
                          labels = lab) +
         #labs(color="Group") +
